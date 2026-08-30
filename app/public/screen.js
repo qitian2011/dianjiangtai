@@ -1,7 +1,6 @@
 /* 大屏展示端逻辑 */
 let S = null;            // 最新状态快照
 let rollTimer = null;
-let pageTimers = [];
 let soundCtx = null;
 let volume = 0.3;
 const $ = id => document.getElementById(id);
@@ -53,26 +52,37 @@ const sfx = {
 
 /* ---------- AI 语音播报（Web Speech API，Windows 自带离线中文语音） ---------- */
 let ttsVoice = null, ttsOK = false;
+function loadVoices() {
+  if (!('speechSynthesis' in window)) return false;
+  const vs = speechSynthesis.getVoices();
+  if (vs && vs.length) {
+    // 优先中文，其次任意可用语音兜底
+    ttsVoice = vs.find(v => /^zh/i.test(v.lang)) || vs.find(v => v.lang) || vs[0];
+    ttsOK = !!ttsVoice;
+    const st = document.getElementById('voiceStatus');
+    if (st) st.textContent = ttsOK ? 'AI 播报可用（' + ttsVoice.name + '）' : '当前设备无可用语音';
+    return ttsOK;
+  }
+  return false;
+}
 function initVoice() {
   if (!('speechSynthesis' in window)) return;
-  const load = () => {
-    const vs = speechSynthesis.getVoices();
-    ttsVoice = vs.find(v => /^zh/i.test(v.lang)) || null;
-    ttsOK = !!ttsVoice;
-    if (ttsOK && document.getElementById('voiceStatus')) document.getElementById('voiceStatus').textContent = 'AI 播报可用（' + ttsVoice.name + '）';
-  };
-  load();
-  speechSynthesis.onvoiceschanged = load; // 部分浏览器语音异步加载
+  loadVoices();
+  speechSynthesis.onvoiceschanged = loadVoices;
+  // 某些浏览器 voices 异步很晚，1 秒后再试一次
+  setTimeout(() => { if (!ttsOK) loadVoices(); }, 1000);
 }
 initVoice();
 function speak(text) {
-  if (!('speechSynthesis' in window) || !ttsVoice) return;
+  if (!('speechSynthesis' in window)) return;
   if (!S || S.voiceMode === 'sound') return;      // 关闭时静默
+  if (!ttsOK) loadVoices();
+  if (!ttsVoice) return;                          // 设备无语音包则静默
   try {
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.voice = ttsVoice; u.lang = ttsVoice.lang || 'zh-CN';
-    u.rate = 1.0; u.volume = Math.max(0.15, S.volume || 0.3);
+    u.rate = 1.0; u.volume = Math.max(0.35, S.volume || 0.3); // 避免音量太小听不见
     speechSynthesis.speak(u);
   } catch (e) {}
 }
@@ -88,7 +98,10 @@ es.onmessage = (e) => {
   else if (msg.event === 'answerStart') showAnswerStart();
   else if (msg.event === 'marked') showMark(msg.result);
   else if (msg.event === 'skipped') { }
-  else if (msg.event === 'page') { /* 传呼状态由随后的 state 推送统一渲染，避免重复弹卡/播报 */ }
+  else if (msg.event === 'page') {
+    // 服务器先发 page 事件，再推 state；这里直接弹出大弹窗+音效，state 到达后不会再重复播放
+    if (msg.page) { S = S || {}; showPage(msg.page); }
+  }
 };
 es.onerror = () => { /* EventSource 自动重连 */ };
 
@@ -128,32 +141,38 @@ function stopSlot() {
   slotTimers = [];
   if (stopSlot._raf) { cancelAnimationFrame(stopSlot._raf); stopSlot._raf = null; }
 }
+function norm(x, m) { return ((x % m) + m) % m; }
 function startSlot(cols, pool, duration) {
   const box = $('slotMachine');
   box.innerHTML = '';
   const rowH = Math.max(42, Math.round(window.innerHeight * 0.10));   // 行高 ≈ 10vmin
-  const rows = 30;                                                     // 名单条长度（滚动连续性）
-  const repeated = [];
-  while (repeated.length < rows) repeated.push(...pool);
+  const rows = 36;                                                     // 名单条长度（滚动连续性）
   const maxH = rows * rowH;
+  const winIdx = 6;                                                    // 最终高亮第 6 行（前后都有余量，避免出界）
   const els = [];
   for (let i = 0; i < cols; i++) {
+    const target = (slotPending && slotPending[i]) ? slotPending[i] : null;
+    const list = [];
+    for (let r = 0; r < rows; r++) {
+      if (r === winIdx) list.push(target || pool[Math.floor(Math.random() * pool.length)]);
+      else list.push(pool[Math.floor(Math.random() * pool.length)]);
+    }
     const col = document.createElement('div');
     col.className = 'slot-col';
     const strip = document.createElement('div');
     strip.className = 'slot-strip';
-    strip.innerHTML = repeated.map(n => `<div class="slot-row">${n}</div>`).join('');
+    strip.innerHTML = list.map(n => `<div class="slot-row">${n}</div>`).join('');
     col.appendChild(strip);
     const win = document.createElement('div');
     win.className = 'slot-window';
     col.appendChild(win);
     box.appendChild(col);
-    els.push({ col, strip, offset: (Math.random() * maxH) | 0, stopped: false, delay: Math.random() * 180, lastRow: -1 });
+    els.push({ col, strip, list, offset: Math.random() * maxH, stopped: false, delay: Math.random() * 180, lastRow: -1, winIdx });
   }
   $('slotTip').textContent = cols > 1 ? `正在抽取 ${cols} 位同学…` : '谁是今天的幸运儿？';
   frame._lastTick = 0;
   const t0 = Date.now();
-  const spinEnd = Math.max(600, duration - 700);   // 转轮停止时间点（末段留给结果页）
+  const spinEnd = Math.max(700, duration - 650);   // 转轮停止时间点（末段留给结果页）
   // requestAnimationFrame 驱动：速度按二次曲线从快衰减到 0，实现真"滚轮"减速
   const frame = () => {
     const el = Date.now() - t0;
@@ -162,33 +181,27 @@ function startSlot(cols, pool, duration) {
       if (c.stopped) return;
       const stopAt = spinEnd - (cols - 1 - i) * 260;   // 逐列依次停止
       if (el >= stopAt + c.delay) {
-        // 定格：滚轮对齐到真实结果行（与 rollResult 完全一致，杜绝"抽到的人不一样"）
+        // 定格：把目标行对齐到窗口中央，offset 必须归一化在 [0, maxH) 内
         c.stopped = true;
-        const target = (slotPending && slotPending[i]) ? slotPending[i] : null;
-        const idx = target ? repeated.indexOf(target) : -1;
-        if (idx >= 0) {
-          // 窗口显示第 idx 行 → offset 置为 (idx-1)*rowH，并按最近方向回绕滑动
-          const to = (((idx - 1) * rowH) % maxH + maxH) % maxH;
-          let d = to - c.offset;
-          if (d > maxH / 2) d -= maxH;
-          if (d < -maxH / 2) d += maxH;
-          c.offset += d;
-          const slide = Math.min(0.55, 0.05 + (Math.abs(d) / rowH) * 0.045);
-          c.strip.style.transition = `transform ${slide}s cubic-bezier(.18,1.35,.3,1)`;
-        } else {
-          c.offset -= c.offset % rowH;
-          c.strip.style.transition = 'transform 0.3s cubic-bezier(.2,1.7,.35,1)';
-        }
+        const to = (c.winIdx - 1) * rowH;
+        const cur = norm(c.offset, maxH);
+        let d = to - cur;
+        if (d > maxH / 2) d -= maxH;
+        if (d < -maxH / 2) d += maxH;
+        c.offset = norm(cur + d, maxH);
+        const slide = Math.min(0.55, 0.05 + (Math.abs(d) / rowH) * 0.045);
+        c.strip.style.transition = `transform ${slide}s cubic-bezier(.18,1.35,.3,1)`;
         c.strip.style.transform = `translateY(${-c.offset}px)`;
         c.col.classList.add('stopped');
         sfx.colStop();
         return;
       }
       const prog = Math.min(1, el / stopAt);
-      c.speed = 15 * (1 - prog * prog);              // 减速曲线：先快后慢
-      c.offset += Math.max(0.2, c.speed);
-      if (c.offset > maxH - rowH) c.offset -= maxH;  // 名单条回绕，保证无限滚动
+      c.speed = rowH * 0.18 * (1 - prog * prog);      // 减速曲线：先快后慢
+      c.offset += Math.max(0.5, c.speed);
+      c.offset = norm(c.offset, maxH);                // 名单条回绕，保证无限滚动
       c.strip.style.transform = `translateY(${-c.offset}px)`;
+      c.strip.style.transition = 'none';
       // 咔哒声与滚轮跨行同步（每帧最多一声，机械感随减速自然变疏）
       const row = Math.floor(c.offset / rowH);
       if (row !== c.lastRow) {
@@ -234,51 +247,32 @@ function showMark(result) {
 }
 
 /* ---------- 传呼 ---------- */
-function clearPageTimers() { pageTimers.forEach(t => { clearTimeout(t); clearInterval(t); }); pageTimers = []; }
-// 横幅（缩小常驻）：教师手机端"已到/撤回"后消失
-function renderBanner(page) {
-  $('pageOverlay').style.display = 'none';
-  $('bnName').textContent = page.names.join('、');
-  $('bnPlace').textContent = '→ ' + page.place;
-  $('bnNote').textContent = page.note || '';
-  $('pageBanner').style.display = '';
-  // 未确认时每 2 分钟重新弹 8 秒提醒（防止学生没看见）
-  const repop = setInterval(() => {
-    if (!S || !S.page || S.page.confirmed || S.page.retracted || S.examMode) { clearInterval(repop); return; }
-    if (S.page.sentAt !== page.sentAt) { clearInterval(repop); return; }
-    $('pageOverlay').style.display = '';
-    pageTimers.push(setTimeout(() => { $('pageOverlay').style.display = 'none'; }, 8000));
-  }, 120000);
-  pageTimers.push(repop);
-}
 function showPage(page) {
   if (!page || page.retracted || page.confirmed) { hidePage(); return; }
-  clearPageTimers();
   const names = page.names.join('、');
   $('pName').textContent = names;
   $('pPlace').textContent = `请到「${page.place}」` + (page.from ? ` 找 ${page.from}` : '');
   $('pNote').textContent = page.note || '';
   $('pFrom').textContent = '请看到通知后及时前往';
-  if (!S || !S.examMode) {
-    sfx.page();
-    // AI 播报：XX 同学，请到「教务处」找李老师，带上作业本（含留言）
-    if (voiceModeAllowsAI()) {
-      speak(`${names} 同学，请到「${page.place}」` + (page.from ? `，找 ${page.from}` : '') + (page.note ? `，${page.note}` : ''));
-    }
-  }
-  if (S && S.examMode) { /* 考试模式只显示角落条，不弹卡不发声 */ return; }
   // 大弹窗居中常驻，直到教师端「已到 / 撤回」才消失
+  if (S && S.examMode) { /* 考试模式只显示角落条，不弹卡不发声 */ return; }
   $('pageOverlay').style.display = '';
+  if (lastPageSoundAt === page.sentAt) return;   // 同一传呼只播一次提示音/AI 语音
+  lastPageSoundAt = page.sentAt;
+  sfx.page();
+  // AI 播报：XX 同学，请到「教务处」找李老师，带上作业本（含留言）
+  if (voiceModeAllowsAI()) {
+    speak(`${names} 同学，请到「${page.place}」` + (page.from ? `，找 ${page.from}` : '') + (page.note ? `，${page.note}` : ''));
+  }
 }
 function hidePage() {
-  clearPageTimers();
   $('pageOverlay').style.display = 'none';
   $('pageBanner').style.display = 'none';
-  sessionStorage.removeItem('csSeenPage');
 }
 
 /* ---------- 渲染 ---------- */
 let lastPageKey = '';
+let lastPageSoundAt = 0;
 function render() {
   if (!S) return;
   volume = S.volume; $('className').textContent = S.className;
@@ -323,18 +317,16 @@ function render() {
   } else {
     view('standby');
   }
-  // 传呼（刷新去重：同标签页刷新过且已弹过的传呼，只挂横条不重复弹卡/播报）
+  // 传呼：只要未确认/未撤回，大屏就显示居中大弹窗；showPage 内部保证同一传呼只播一次音
   const p = S.page;
   const key = p ? p.sentAt : '';
-  if (key !== lastPageKey) {
+  if (p && !p.retracted && !p.confirmed) {
     lastPageKey = key;
-    if (p && !p.retracted && !p.confirmed) {
-      if (sessionStorage.getItem('csSeenPage') === String(key)) renderBanner(p); // 已看过：只挂横条
-      else { showPage(p); sessionStorage.setItem('csSeenPage', String(key)); }   // 新传呼：弹卡+播报
-    } else hidePage();
+    showPage(p);
+  } else if (key !== lastPageKey) {
+    lastPageKey = key;
+    hidePage();
   }
-  // 撤回 / 确认已到 → 横幅立即消失
-  if (p && (p.retracted || p.confirmed)) hidePage();
   // 考试模式
   if (S.examMode) {
     $('pageOverlay').style.display = 'none';
