@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>课堂互动大屏 · 展示端</title>
+<link rel="stylesheet" href="style.css">
+<script src="theme.js"></script>
+</head>
+<body class="screen">
+  <!-- 传呼横条（缩小常驻） -->
+  <div class="page-banner" id="pageBanner" style="display:none">
+    <span>📢 传呼中：</span><span class="bn-name" id="bnName"></span>
+    <span id="bnPlace"></span><span id="bnNote" style="color:#bcd0ee"></span>
+  </div>
+  <!-- 考试模式角落条 -->
+  <div class="exam-strip" id="examStrip" style="display:none">📢 传呼：<span id="examText"></span></div>
+  <!-- 本节课点名录 -->
+  <div class="lesson-log" id="lessonLog"></div>
+
+  <div class="topbar">
+    <span class="cls" id="className">—</span>
+    <span id="clock"></span>
+  </div>
+
+  <div class="center" id="center">
+    <!-- 待机 -->
+    <div id="standby">
+      <div class="title">课 堂 互 动 大 屏</div>
+      <div class="standby-name">准 备 就 绪</div>
+      <div class="qr-row" id="qrRow"></div>
+      <div class="url-tip" id="urlTip">教师手机扫码，或浏览器打开以下地址</div>
+      <div class="url-list" id="ctrlUrls"></div>
+    </div>
+    <!-- 滚动：经典滚动 + 老虎机 -->
+    <div id="rolling" style="display:none">
+      <div class="title">随 机 点 名</div>
+      <div class="roll-name" id="rollName" style="display:none">……</div>
+      <div class="slot-machine" id="slotMachine"></div>
+      <div class="slot-tip" id="slotTip">谁是今天的幸运儿？</div>
+    </div>
+    <!-- 结果 -->
+    <div id="result" style="display:none">
+      <div class="title">被 点 到 的 是</div>
+      <div class="result-names" id="resultNames"></div>
+      <div class="result-groups" id="resultGroups"></div>
+      <div class="hint" id="resultHint">请回答问题</div>
+    </div>
+    <!-- 答题计时 -->
+    <div id="answering" style="display:none">
+      <div class="answer-name">请 <b id="ansName"></b> 回答问题</div>
+      <div class="countdown" id="countdown">60</div>
+    </div>
+  </div>
+
+  <!-- 传呼全屏通知 -->
+  <div class="page-overlay" id="pageOverlay" style="display:none">
+    <div class="page-card">
+      <div class="bell">🔔</div>
+      <div class="p-name" id="pName"></div>
+      <div class="p-place" id="pPlace"></div>
+      <div class="p-note" id="pNote"></div>
+      <div class="p-from" id="pFrom"></div>
+    </div>
+  </div>
+
+<script src="vendor/qrcode.min.js"></script>
+<script src="screen.js"></script>
+</body>
+</html>

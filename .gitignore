@@ -1,0 +1,9 @@
+# 真实学生名单（隐私数据，不上传公开仓库）
+# 需要备份名单时请复制为 roster.json 或使用私有仓库
+app/roster.json
+
+# 系统/临时文件
+Thumbs.db
+Desktop.ini
+*.log
+node_modules/
