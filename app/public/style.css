@@ -71,8 +71,37 @@
   }
 }
 
-/* ---------- 强制深色 ---------- */
-:root[data-theme="dark"] { /* 与默认深色一致，保证强制优先级 */ }
+/* ---------- 强制深色（重新声明全套深色变量，覆盖"跟随系统浅色"的媒体查询） ---------- */
+:root[data-theme="dark"] {
+  --bg: #000;
+  --bg-grad: radial-gradient(1200px 900px at 70% -10%, #1c2b4a 0%, #05070c 60%, #000 100%);
+  --card: rgba(44, 44, 46, .66);
+  --card2: rgba(58, 58, 60, .75);
+  --input-bg: rgba(118, 118, 128, .18);
+  --chip-bg: rgba(118, 118, 128, .22);
+  --text: #f2f2f7;
+  --dim: #98989f;
+  --accent: #0a84ff;
+  --green: #30d158;
+  --red: #ff453a;
+  --yellow: #ffd60a;
+  --orange: #ff9f0a;
+  --separator: rgba(84, 84, 88, .55);
+  --glass: rgba(30, 30, 32, .72);
+  --topbar-bg: rgba(10, 12, 20, .4);
+  --slot-bg: linear-gradient(180deg, rgba(24,26,32,.9), rgba(44,46,52,.75) 45%, rgba(24,26,32,.9));
+  --slot-mask: #0d1018;
+  --slot-text: #eef2f8;
+  --page-card-bg: rgba(24, 28, 38, .88);
+  --page-note: #bcd0ee;
+  --sub: #9db4d8;
+  --mark-right: rgba(48,209,88,.18);
+  --mark-wrong: rgba(255,69,58,.18);
+  --mark-none: rgba(255,159,10,.16);
+  --tabs-bg: rgba(44, 44, 46, .6);
+  --tab-on: #636366;
+  --qr-glow: rgba(10,132,255,.15);
+}
 
 /* ---------- 强制浅色（放在最后覆盖媒体查询） ---------- */
 :root[data-theme="light"] {
@@ -232,6 +261,7 @@ label.switch input:checked::after { transform: translateX(19px); }
 }
 @media (prefers-color-scheme: light) { .screen { background: radial-gradient(1400px 800px at 50% -20%, #dce7f7 0%, #f2f4f8 55%, #eef0f4 100%); } }
 :root[data-theme="light"] .screen { background: radial-gradient(1400px 800px at 50% -20%, #dce7f7 0%, #f2f4f8 55%, #eef0f4 100%); }
+:root[data-theme="dark"] .screen { background: radial-gradient(1400px 800px at 50% -20%, #16233d 0%, #0a0f1c 55%, #000 100%); }
 
 .screen .topbar {
   position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center;
