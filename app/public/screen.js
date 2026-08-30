@@ -25,7 +25,7 @@ function beep(freq, dur, when = 0, vol = 1, type = 'sine') {
     o.start(soundCtx.currentTime + when); o.stop(soundCtx.currentTime + when + dur);
   } catch (e) {}
 }
-// 白噪声脉冲：模拟机械咔哒/摩擦声（老虎机滚轮音效的核心材质）
+// 白噪声脉冲：模拟机械咔哒声（滚动音效材质）
 function playNoise(dur = 0.03, vol = 1, freq = 2400) {
   try {
     ensureAudio();
@@ -43,8 +43,7 @@ function playNoise(dur = 0.03, vol = 1, freq = 2400) {
   } catch (e) {}
 }
 const sfx = {
-  rollTick: () => playNoise(0.022, 0.5, 3000),                 // 滚轮咔哒：短噪声脉冲
-  colStop: () => { beep(190, 0.12, 0, 0.9, 'triangle'); playNoise(0.05, 0.8, 900); }, // 定格：低频"咚"+咔哒
+  rollTick: () => playNoise(0.022, 0.5, 3000),                 // 滚动咔哒：短噪声脉冲
   reveal: () => { beep(523, 0.12); beep(784, 0.18, 0.12); },
   page: () => { beep(880, 0.15); beep(880, 0.15, 0.25); beep(1174, 0.3, 0.5); },
   countEnd: () => { for (let i = 0; i < 3; i++) beep(988, 0.1, i * 0.18); }
@@ -110,119 +109,37 @@ function view(name) {
   for (const v of ['standby', 'rolling', 'result', 'answering']) $(v).style.display = v === name ? '' : 'none';
 }
 function startRoll(msg) {
-  const duration = msg.duration || 3000;
-  const style = msg.style || 'slot';
   const pool = (msg.pool && msg.pool.length ? msg.pool : (S ? S.students.map(s => s.name) : ['张三', '李四', '王五']));
-  slotPending = msg.resultNames || null;
   view('rolling');
-  clearInterval(rollTimer);
-  stopSlot();
-  if (style === 'classic') {
-    $('rollName').style.display = '';
-    $('slotMachine').style.display = 'none';
-    $('slotTip').style.display = 'none';
-    rollTimer = setInterval(() => {
-      $('rollName').textContent = pool[Math.floor(Math.random() * pool.length)];
-      sfx.rollTick();
-    }, 90);
-  } else {
-    $('rollName').style.display = 'none';
-    $('slotMachine').style.display = '';
-    $('slotTip').style.display = '';
-    startSlot(Math.max(1, Math.min(4, msg.slots || 1)), pool, duration);
-  }
-}
-
-/* ---------- 老虎机：多列滚轮，逐列减速停止 ---------- */
-let slotTimers = [];
-let slotPending = null;   // 本轮真实结果（rollStart 携带），定格时滚轮对齐到它，杜绝"抽到的人不一样"
-function stopSlot() {
-  slotTimers.forEach(t => { clearTimeout(t); clearInterval(t); });
-  slotTimers = [];
-  if (stopSlot._raf) { cancelAnimationFrame(stopSlot._raf); stopSlot._raf = null; }
-}
-function norm(x, m) { return ((x % m) + m) % m; }
-function startSlot(cols, pool, duration) {
-  const box = $('slotMachine');
-  box.innerHTML = '';
-  const rowH = Math.max(42, Math.round(window.innerHeight * 0.10));   // 行高 ≈ 10vmin
-  const rows = 36;                                                     // 名单条长度（滚动连续性）
-  const maxH = rows * rowH;
-  const winIdx = 6;                                                    // 最终高亮第 6 行（前后都有余量，避免出界）
-  const els = [];
-  for (let i = 0; i < cols; i++) {
-    const target = (slotPending && slotPending[i]) ? slotPending[i] : null;
-    const list = [];
-    for (let r = 0; r < rows; r++) {
-      if (r === winIdx) list.push(target || pool[Math.floor(Math.random() * pool.length)]);
-      else list.push(pool[Math.floor(Math.random() * pool.length)]);
-    }
-    const col = document.createElement('div');
-    col.className = 'slot-col';
-    const strip = document.createElement('div');
-    strip.className = 'slot-strip';
-    strip.innerHTML = list.map(n => `<div class="slot-row">${n}</div>`).join('');
-    col.appendChild(strip);
-    const win = document.createElement('div');
-    win.className = 'slot-window';
-    col.appendChild(win);
-    box.appendChild(col);
-    els.push({ col, strip, list, offset: Math.random() * maxH, stopped: false, delay: Math.random() * 180, lastRow: -1, winIdx });
-  }
-  $('slotTip').textContent = cols > 1 ? `正在抽取 ${cols} 位同学…` : '谁是今天的幸运儿？';
-  frame._lastTick = 0;
+  clearInterval(rollTimer); clearTimeout(rollTimer);
+  $('rollName').classList.add('rolling');
+  // 经典滚动：快速轮换姓名，逐次放慢 + 咔哒声，结束前 400ms 停止
+  const spinEnd = Math.max(600, (msg.duration || 3000) - 400);
   const t0 = Date.now();
-  const spinEnd = Math.max(700, duration - 650);   // 转轮停止时间点（末段留给结果页）
-  // requestAnimationFrame 驱动：速度按二次曲线从快衰减到 0，实现真"滚轮"减速
   const frame = () => {
     const el = Date.now() - t0;
-    let running = false;
-    els.forEach((c, i) => {
-      if (c.stopped) return;
-      const stopAt = spinEnd - (cols - 1 - i) * 260;   // 逐列依次停止
-      if (el >= stopAt + c.delay) {
-        // 定格：把目标行对齐到窗口中央，offset 必须归一化在 [0, maxH) 内
-        c.stopped = true;
-        const to = (c.winIdx - 1) * rowH;
-        const cur = norm(c.offset, maxH);
-        let d = to - cur;
-        if (d > maxH / 2) d -= maxH;
-        if (d < -maxH / 2) d += maxH;
-        c.offset = norm(cur + d, maxH);
-        const slide = Math.min(0.55, 0.05 + (Math.abs(d) / rowH) * 0.045);
-        c.strip.style.transition = `transform ${slide}s cubic-bezier(.18,1.35,.3,1)`;
-        c.strip.style.transform = `translateY(${-c.offset}px)`;
-        c.col.classList.add('stopped');
-        sfx.colStop();
-        return;
-      }
-      const prog = Math.min(1, el / stopAt);
-      c.speed = rowH * 0.18 * (1 - prog * prog);      // 减速曲线：先快后慢
-      c.offset += Math.max(0.5, c.speed);
-      c.offset = norm(c.offset, maxH);                // 名单条回绕，保证无限滚动
-      c.strip.style.transform = `translateY(${-c.offset}px)`;
-      c.strip.style.transition = 'none';
-      // 咔哒声与滚轮跨行同步（每帧最多一声，机械感随减速自然变疏）
-      const row = Math.floor(c.offset / rowH);
-      if (row !== c.lastRow) {
-        c.lastRow = row;
-        const now = performance.now();
-        if (now - frame._lastTick > 42) { frame._lastTick = now; sfx.rollTick(); }
-      }
-      running = true;
-    });
-    if (running) {
-      stopSlot._raf = requestAnimationFrame(frame);
-    }
+    if (el >= spinEnd) { clearTimeout(rollTimer); return; }
+    $('rollName').textContent = pool[Math.floor(Math.random() * pool.length)];
+    // 滚动越久间隔越长（缓出感），最后阶段自然减速
+    const prog = el / spinEnd;
+    rollTimer = setTimeout(frame, 60 + prog * prog * 260);
+    sfx.rollTick();
   };
   frame();
 }
+
+/* ---------- 老虎机已移除：仅保留经典滚动 ---------- */
+
 function showResult(msg) {
-  clearInterval(rollTimer);
-  slotPending = null;   // 动画结束，清理对齐目标
+  clearTimeout(rollTimer); clearInterval(rollTimer);
+  $('rollName').classList.remove('rolling');
   view('result');
   const names = msg.display || msg.names || [];
   $('resultNames').textContent = names.join('  ');
+  // 重触发弹入动画
+  $('resultNames').classList.remove('pop-in');
+  void $('resultNames').offsetWidth;
+  $('resultNames').classList.add('pop-in');
   // 组名小字（有组才显示）
   const groups = (msg.students || []).map(s => s.group).filter(Boolean);
   $('resultGroups').textContent = groups.length ? groups.join('  ·  ') : '';

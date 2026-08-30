@@ -95,7 +95,6 @@ function render() {
   $('volSlider').value = Math.round((S.volume || 0.3) * 100);
   $('volText').textContent = Math.round((S.volume || 0.3) * 100) + '%';
   syncChips('animChips', 'ms', String(S.animationMs));
-  syncChips('styleChips', 's', S.rollStyle || 'slot');
   syncChips('voiceChips', 'm', S.voiceMode || 'sound');
   syncChips('themeChips', 't', (window.__getTheme ? __getTheme() : 'auto'));
 }
@@ -211,7 +210,6 @@ $('renameClassBtn').onclick = () => {
 };
 $('examChk').onchange = e => cmd({ action: 'examMode', on: e.target.checked });
 $('animChips').addEventListener('click', e => { if (e.target.dataset.ms) cmd({ action: 'setAnim', ms: +e.target.dataset.ms }); });
-$('styleChips').addEventListener('click', e => { if (e.target.dataset.s) cmd({ action: 'setRollStyle', style: e.target.dataset.s }); });
 $('voiceChips').addEventListener('click', e => { if (e.target.dataset.m) cmd({ action: 'setVoiceMode', mode: e.target.dataset.m }); });
 $('themeChips').addEventListener('click', e => { if (e.target.dataset.t) { window.__setTheme(e.target.dataset.t); render(); } });
 let volT = null;

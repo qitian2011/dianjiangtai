@@ -54,7 +54,7 @@ const session = {
   examMode: false,
   volume: 0.3,
   animationMs: 3000,
-  rollStyle: 'slot',  // 'slot'=老虎机（默认，转轮逐列停止） | 'classic'=经典滚动
+  rollStyle: 'classic', // 仅保留经典滚动（老虎机已移除）
   voiceMode: 'sound', // 'sound'=仅提示音 | 'ai'=仅AI播报 | 'both'=提示音+AI播报
   lessonLog: [],         // 本节课点名记录
   pageLog: []            // 今日传呼记录
@@ -152,11 +152,11 @@ function handleCmd(body, res) {
       const names = picked.map(s => s.name);
       const display = picked.map(disp);
       const students = picked.map(s => ({ name: s.name, group: s.group || '' }));
-      // 老虎机滚动内容用全班姓名（排除当日请假），结果不提前泄漏
+      // 滚动内容用全班姓名（排除当日请假），结果不提前泄漏
       const pool = cls.students.map(s => s.name).filter(n => !absentNames(cls).includes(n));
       picked.forEach(s => { s.pickedCount = (s.pickedCount || 0) + 1; session.pickedThisRound.push(s.name); });
       session.lessonLog.push({ names, display, at: now });
-      broadcast({ event: 'rollStart', duration: session.animationMs, style: session.rollStyle, slots: names.length, pool, resultNames: names });
+      broadcast({ event: 'rollStart', duration: session.animationMs, pool });
       const dur = Math.max(500, session.animationMs);
       setTimeout(() => {
         session.lastPick = { names, display, at: Date.now() };
@@ -202,7 +202,7 @@ function handleCmd(body, res) {
         const pool2 = cls.students.map(s => s.name).filter(n => !absentNames(cls).includes(n));
         picked.forEach(s => { s.pickedCount = (s.pickedCount || 0) + 1; session.pickedThisRound.push(s.name); });
         session.lessonLog.push({ names, display, at: Date.now() });
-        broadcast({ event: 'rollStart', duration: session.animationMs, style: session.rollStyle, slots: names.length, pool: pool2, resultNames: names });
+        broadcast({ event: 'rollStart', duration: session.animationMs, pool: pool2 });
         setTimeout(() => {
           session.lastPick = { names, display, at: Date.now() };
           saveRoster(); pushState(); broadcast({ event: 'rollResult', names, display, students });
@@ -231,7 +231,7 @@ function handleCmd(body, res) {
     case 'examMode': session.examMode = !!body.on; break;
     case 'setVolume': session.volume = Math.min(1, Math.max(0, +body.value || 0)); break;
     case 'setAnim': session.animationMs = [2000, 3000, 5000].includes(body.ms) ? body.ms : 3000; break;
-    case 'setRollStyle': session.rollStyle = body.style === 'classic' ? 'classic' : 'slot'; break;
+    case 'setRollStyle': session.rollStyle = 'classic'; break; // 兼容旧指令，样式已固定
     case 'setVoiceMode': session.voiceMode = ['sound', 'ai', 'both'].includes(body.mode) ? body.mode : 'sound'; break;
     case 'classSwitch': {
       const i = body.index | 0;
