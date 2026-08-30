@@ -15,20 +15,39 @@ function ensureAudio() {
 }
 // 首次任意触摸/按键即解锁声音（自动播放策略要求用户手势）
 ['pointerdown', 'touchstart', 'keydown'].forEach(ev => document.addEventListener(ev, ensureAudio));
-function beep(freq, dur, when = 0, vol = 1) {
+function beep(freq, dur, when = 0, vol = 1, type = 'sine') {
   try {
     if (S && S.voiceMode === 'ai' && ttsOK) return; // 仅AI播报且AI可用时才静音提示音（AI不可用则降级保留提示音）
     ensureAudio();
     const o = soundCtx.createOscillator(), g = soundCtx.createGain();
-    o.frequency.value = freq; o.type = 'sine';
+    o.frequency.value = freq; o.type = type;
     g.gain.setValueAtTime(volume * vol, soundCtx.currentTime + when);
     g.gain.exponentialRampToValueAtTime(0.0001, soundCtx.currentTime + when + dur);
     o.connect(g); g.connect(soundCtx.destination);
     o.start(soundCtx.currentTime + when); o.stop(soundCtx.currentTime + when + dur);
   } catch (e) {}
 }
+// 白噪声脉冲：模拟机械咔哒/摩擦声（老虎机滚轮音效的核心材质）
+function playNoise(dur = 0.03, vol = 1, freq = 2400) {
+  try {
+    if (S && S.voiceMode === 'ai' && ttsOK) return;
+    ensureAudio();
+    const n = Math.max(1, Math.floor(soundCtx.sampleRate * dur));
+    const buf = soundCtx.createBuffer(1, n, soundCtx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n); // 快速衰减
+    const src = soundCtx.createBufferSource(); src.buffer = buf;
+    const f = soundCtx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = 1.1;
+    const g = soundCtx.createGain();
+    g.gain.setValueAtTime(volume * vol, soundCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, soundCtx.currentTime + dur);
+    src.connect(f); f.connect(g); g.connect(soundCtx.destination);
+    src.start();
+  } catch (e) {}
+}
 const sfx = {
-  rollTick: () => beep(660, 0.05, 0, 0.5),
+  rollTick: () => playNoise(0.022, 0.5, 3000),                 // 滚轮咔哒：短噪声脉冲
+  colStop: () => { beep(190, 0.12, 0, 0.9, 'triangle'); playNoise(0.05, 0.8, 900); }, // 定格：低频"咚"+咔哒
   reveal: () => { beep(523, 0.12); beep(784, 0.18, 0.12); },
   page: () => { beep(880, 0.15); beep(880, 0.15, 0.25); beep(1174, 0.3, 0.5); },
   countEnd: () => { for (let i = 0; i < 3; i++) beep(988, 0.1, i * 0.18); }
@@ -131,9 +150,10 @@ function startSlot(cols, pool, duration) {
     win.className = 'slot-window';
     col.appendChild(win);
     box.appendChild(col);
-    els.push({ col, strip, offset: (Math.random() * maxH) | 0, stopped: false, delay: Math.random() * 180 });
+    els.push({ col, strip, offset: (Math.random() * maxH) | 0, stopped: false, delay: Math.random() * 180, lastRow: -1 });
   }
   $('slotTip').textContent = cols > 1 ? `正在抽取 ${cols} 位同学…` : '谁是今天的幸运儿？';
+  frame._lastTick = 0;
   const t0 = Date.now();
   const spinEnd = Math.max(600, duration - 700);   // 转轮停止时间点（末段留给结果页）
   // requestAnimationFrame 驱动：速度按二次曲线从快衰减到 0，实现真"滚轮"减速
@@ -163,7 +183,7 @@ function startSlot(cols, pool, duration) {
         }
         c.strip.style.transform = `translateY(${-c.offset}px)`;
         c.col.classList.add('stopped');
-        beep(880, 0.12, 0, 0.8);
+        sfx.colStop();
         return;
       }
       const prog = Math.min(1, el / stopAt);
@@ -171,10 +191,16 @@ function startSlot(cols, pool, duration) {
       c.offset += Math.max(0.2, c.speed);
       if (c.offset > maxH - rowH) c.offset -= maxH;  // 名单条回绕，保证无限滚动
       c.strip.style.transform = `translateY(${-c.offset}px)`;
+      // 咔哒声与滚轮跨行同步（每帧最多一声，机械感随减速自然变疏）
+      const row = Math.floor(c.offset / rowH);
+      if (row !== c.lastRow) {
+        c.lastRow = row;
+        const now = performance.now();
+        if (now - frame._lastTick > 42) { frame._lastTick = now; sfx.rollTick(); }
+      }
       running = true;
     });
     if (running) {
-      if (Math.random() < 0.4) sfx.rollTick();       // 滚动音效节流，避免刺耳
       stopSlot._raf = requestAnimationFrame(frame);
     }
   };
