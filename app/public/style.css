@@ -9,7 +9,7 @@
 :root {
   --bg: #000;
   --bg-grad: radial-gradient(1200px 900px at 70% -10%, #1c2b4a 0%, #05070c 60%, #000 100%);
-  --card: rgba(44, 44, 46, .66);
+  --card: rgba(38, 40, 48, .50);
   --card2: rgba(58, 58, 60, .75);
   --input-bg: rgba(118, 118, 128, .18);
   --chip-bg: rgba(118, 118, 128, .22);
@@ -33,7 +33,7 @@
   --mark-wrong: rgba(255,69,58,.18);
   --mark-none: rgba(255,159,10,.16);
   --tabs-bg: rgba(44, 44, 46, .6);
-  --tab-on: #636366;
+  --tab-on: rgba(120, 120, 128, .42);
   --qr-glow: rgba(10,132,255,.15);
 }
 
@@ -42,7 +42,7 @@
   :root {
     --bg: #f2f2f7;
     --bg-grad: radial-gradient(1200px 900px at 70% -10%, #e4edfb 0%, #f8f9fb 55%, #f2f2f7 100%);
-    --card: rgba(255, 255, 255, .78);
+    --card: rgba(255, 255, 255, .55);
     --card2: rgba(118, 118, 128, .13);
     --input-bg: rgba(118, 118, 128, .12);
     --chip-bg: rgba(118, 118, 128, .16);
@@ -66,7 +66,7 @@
     --mark-wrong: rgba(255,59,48,.15);
     --mark-none: rgba(255,149,0,.16);
     --tabs-bg: rgba(118, 118, 128, .14);
-    --tab-on: #ffffff;
+    --tab-on: rgba(255, 255, 255, .85);
     --qr-glow: rgba(0,122,255,.12);
   }
 }
@@ -75,7 +75,7 @@
 :root[data-theme="dark"] {
   --bg: #000;
   --bg-grad: radial-gradient(1200px 900px at 70% -10%, #1c2b4a 0%, #05070c 60%, #000 100%);
-  --card: rgba(44, 44, 46, .66);
+  --card: rgba(38, 40, 48, .50);
   --card2: rgba(58, 58, 60, .75);
   --input-bg: rgba(118, 118, 128, .18);
   --chip-bg: rgba(118, 118, 128, .22);
@@ -99,7 +99,7 @@
   --mark-wrong: rgba(255,69,58,.18);
   --mark-none: rgba(255,159,10,.16);
   --tabs-bg: rgba(44, 44, 46, .6);
-  --tab-on: #636366;
+  --tab-on: rgba(120, 120, 128, .42);
   --qr-glow: rgba(10,132,255,.15);
 }
 
@@ -107,7 +107,7 @@
 :root[data-theme="light"] {
   --bg: #f2f2f7;
   --bg-grad: radial-gradient(1200px 900px at 70% -10%, #e4edfb 0%, #f8f9fb 55%, #f2f2f7 100%);
-  --card: rgba(255, 255, 255, .78);
+  --card: rgba(255, 255, 255, .55);
   --card2: rgba(118, 118, 128, .13);
   --input-bg: rgba(118, 118, 128, .12);
   --chip-bg: rgba(118, 118, 128, .16);
@@ -131,7 +131,7 @@
   --mark-wrong: rgba(255,59,48,.15);
   --mark-none: rgba(255,149,0,.16);
   --tabs-bg: rgba(118, 118, 128, .14);
-  --tab-on: #ffffff;
+  --tab-on: rgba(255, 255, 255, .85);
   --qr-glow: rgba(0,122,255,.12);
 }
 
@@ -144,6 +144,25 @@ body {
   -webkit-font-smoothing: antialiased;
   transition: background .3s ease, color .3s ease;
 }
+/* macOS 风格极光色块：给毛玻璃提供可模糊的背景层次 */
+body::before, body::after {
+  content: ''; position: fixed; z-index: -1; border-radius: 50%; filter: blur(80px);
+  pointer-events: none; animation: blob-drift 26s ease-in-out infinite alternate;
+}
+body::before {
+  width: 68vmax; height: 68vmax; top: -24vmax; right: -20vmax;
+  background: radial-gradient(circle at 35% 35%, rgba(10,132,255,.20), rgba(94,92,230,.10) 55%, transparent 75%);
+}
+body::after {
+  width: 56vmax; height: 56vmax; bottom: -22vmax; left: -18vmax;
+  background: radial-gradient(circle at 60% 60%, rgba(255,159,10,.14), rgba(255,55,95,.08) 55%, transparent 75%);
+  animation-delay: -13s;
+}
+@keyframes blob-drift {
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(-4vmax, 3vmax) scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) { body::before, body::after { animation: none; } }
 button, input, select, textarea { font-family: inherit; }
 
 /* ==================== 控制端 ==================== */
@@ -190,13 +209,15 @@ button, input, select, textarea { font-family: inherit; }
 /* 按钮 */
 .btn {
   border: none; border-radius: 14px; padding: 13px 18px; font-size: 16px; font-weight: 600; color: var(--text);
-  background: var(--card2); cursor: pointer; min-height: 46px; transition: transform .12s ease, opacity .2s;
+  background: rgba(130, 130, 140, .22); cursor: pointer; min-height: 46px; transition: transform .12s ease, opacity .2s, background .3s;
+  backdrop-filter: blur(16px) saturate(1.5); -webkit-backdrop-filter: blur(16px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, .08);
 }
 .btn:active { transform: scale(.96); opacity: .85; }
-.btn.primary { background: var(--accent); color: #fff; box-shadow: 0 4px 16px rgba(10,132,255,.35); }
-.btn.warn { background: var(--orange); color: #fff; box-shadow: 0 4px 16px rgba(255,159,10,.3); }
-.btn.danger { background: var(--red); color: #fff; box-shadow: 0 4px 16px rgba(255,69,58,.3); }
-.btn.success { background: var(--green); color: #04330f; box-shadow: 0 4px 16px rgba(48,209,88,.3); }
+.btn.primary { background: rgba(10, 132, 255, .85); color: #fff; box-shadow: 0 4px 16px rgba(10,132,255,.35); }
+.btn.warn { background: rgba(255, 159, 10, .85); color: #fff; box-shadow: 0 4px 16px rgba(255,159,10,.3); }
+.btn.danger { background: rgba(255, 69, 58, .85); color: #fff; box-shadow: 0 4px 16px rgba(255,69,58,.3); }
+.btn.success { background: rgba(48, 209, 88, .85); color: #04330f; box-shadow: 0 4px 16px rgba(48,209,88,.3); }
 .btn.big { width: 100%; font-size: 19px; padding: 17px 0; border-radius: 16px; font-weight: 700; letter-spacing: 2px; }
 .btn.small { min-height: 36px; padding: 7px 14px; font-size: 13px; border-radius: 10px; }
 .btn:disabled { opacity: .4; }
@@ -357,16 +378,16 @@ label.switch input:checked::after { transform: translateX(19px); }
 /* 传呼 */
 .page-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.72); z-index: 20; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 .page-card {
-  background: var(--page-card-bg); border: 1px solid var(--separator); border-radius: 4vmin;
-  padding: 6vmin 9vmin; text-align: center; max-width: 80vw; animation: pop .45s cubic-bezier(.2,1.6,.4,1);
-  box-shadow: 0 0 100px rgba(10,132,255,.12), 0 4vmin 10vmin rgba(0,0,0,.4);
-  backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+  background: var(--page-card-bg); border: 1px solid var(--separator); border-radius: 5vmin;
+  padding: 8vmin 10vmin; text-align: center; max-width: 92vw; animation: pop .45s cubic-bezier(.2,1.6,.4,1);
+  box-shadow: 0 0 120px rgba(10,132,255,.18), 0 5vmin 12vmin rgba(0,0,0,.45);
+  backdrop-filter: blur(40px) saturate(1.6); -webkit-backdrop-filter: blur(40px) saturate(1.6);
 }
-.page-card .bell { font-size: 6vmin; margin-bottom: 1vmin; }
-.page-card .p-name { font-size: 10vmin; font-weight: 800; color: var(--yellow); }
-.page-card .p-place { font-size: 6.5vmin; font-weight: 700; color: var(--text); margin-top: 1.5vmin; }
-.page-card .p-note { font-size: 3.8vmin; color: var(--page-note); margin-top: 2vmin; }
-.page-card .p-from { font-size: 3.4vmin; color: var(--dim); margin-top: 1vmin; }
+.page-card .bell { font-size: 9vmin; margin-bottom: 1.5vmin; }
+.page-card .p-name { font-size: 13vmin; font-weight: 800; color: var(--yellow); letter-spacing: 1vmin; }
+.page-card .p-place { font-size: 8vmin; font-weight: 700; color: var(--text); margin-top: 2vmin; }
+.page-card .p-note { font-size: 4.8vmin; color: var(--page-note); margin-top: 3vmin; line-height: 1.5; }
+.page-card .p-from { font-size: 4vmin; color: var(--dim); margin-top: 1.5vmin; }
 
 .page-banner {
   position: absolute; top: 7vmin; left: 0; right: 0; z-index: 15;

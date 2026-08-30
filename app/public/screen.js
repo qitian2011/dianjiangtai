@@ -7,10 +7,18 @@ let volume = 0.3;
 const $ = id => document.getElementById(id);
 
 /* ---------- 声音 ---------- */
+function ensureAudio() {
+  try {
+    soundCtx = soundCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (soundCtx.state === 'suspended') soundCtx.resume(); // 解除浏览器自动播放限制
+  } catch (e) {}
+}
+// 首次任意触摸/按键即解锁声音（自动播放策略要求用户手势）
+['pointerdown', 'touchstart', 'keydown'].forEach(ev => document.addEventListener(ev, ensureAudio));
 function beep(freq, dur, when = 0, vol = 1) {
   try {
-    if (S && S.voiceMode === 'ai') return; // 仅AI播报模式：不播提示音
-    soundCtx = soundCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (S && S.voiceMode === 'ai' && ttsOK) return; // 仅AI播报且AI可用时才静音提示音（AI不可用则降级保留提示音）
+    ensureAudio();
     const o = soundCtx.createOscillator(), g = soundCtx.createGain();
     o.frequency.value = freq; o.type = 'sine';
     g.gain.setValueAtTime(volume * vol, soundCtx.currentTime + when);
