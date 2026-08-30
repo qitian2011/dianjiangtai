@@ -17,7 +17,6 @@ function ensureAudio() {
 ['pointerdown', 'touchstart', 'keydown'].forEach(ev => document.addEventListener(ev, ensureAudio));
 function beep(freq, dur, when = 0, vol = 1, type = 'sine') {
   try {
-    if (S && S.voiceMode === 'ai' && ttsOK) return; // 仅AI播报且AI可用时才静音提示音（AI不可用则降级保留提示音）
     ensureAudio();
     const o = soundCtx.createOscillator(), g = soundCtx.createGain();
     o.frequency.value = freq; o.type = type;
@@ -30,7 +29,6 @@ function beep(freq, dur, when = 0, vol = 1, type = 'sine') {
 // 白噪声脉冲：模拟机械咔哒/摩擦声（老虎机滚轮音效的核心材质）
 function playNoise(dur = 0.03, vol = 1, freq = 2400) {
   try {
-    if (S && S.voiceMode === 'ai' && ttsOK) return;
     ensureAudio();
     const n = Math.max(1, Math.floor(soundCtx.sampleRate * dur));
     const buf = soundCtx.createBuffer(1, n, soundCtx.sampleRate);
@@ -269,9 +267,8 @@ function showPage(page) {
     }
   }
   if (S && S.examMode) { /* 考试模式只显示角落条，不弹卡不发声 */ return; }
-  const dur = page.duration; // 秒，0=常驻
-  if (dur > 0) { $('pageOverlay').style.display = ''; pageTimers.push(setTimeout(() => renderBanner(page), dur * 1000)); }
-  else { $('pageOverlay').style.display = ''; }
+  // 大弹窗居中常驻，直到教师端「已到 / 撤回」才消失
+  $('pageOverlay').style.display = '';
 }
 function hidePage() {
   clearPageTimers();
