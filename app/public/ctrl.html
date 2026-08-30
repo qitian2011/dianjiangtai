@@ -185,6 +185,25 @@
     </div>
   </div>
 </div>
+<!-- 点名结果大弹窗 -->
+<div class="modal-overlay" id="pickModal" style="display:none">
+  <div class="modal-card">
+    <button class="modal-close" id="pickModalClose">×</button>
+    <div class="modal-label">🎯 被点到的是</div>
+    <div class="modal-names" id="pickModalNames"></div>
+    <div class="modal-actions" id="pickModalAsk">
+      <button class="btn success big" id="pickModalAskBtn">🎤 请回答</button>
+      <button class="btn warn" id="pickModalSkipBtn">跳过TA →</button>
+    </div>
+    <div id="pickModalTimers" style="display:none">
+      <div class="modal-label" style="margin-bottom:8px">选择倒计时（大屏开始计时）</div>
+      <div class="count-select" id="pickModalTimerChips" style="justify-content:center">
+        <span class="chip" data-d="30">30秒</span><span class="chip sel" data-d="60">1分钟</span>
+        <span class="chip" data-d="120">2分钟</span><span class="chip" data-d="0">不限</span>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 <script src="ctrl.js"></script>
 </body>

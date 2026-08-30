@@ -211,6 +211,35 @@ button, input, select, textarea { font-family: inherit; }
 .count-select { display: flex; gap: 8px; }
 .count-select .chip { flex: 1; text-align: center; }
 
+/* ---------- 点名结果大弹窗 ---------- */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  animation: fadeIn .2s ease;
+}
+.modal-card {
+  position: relative; width: min(88vw, 420px);
+  background: var(--page-card-bg, var(--glass)); border: 1px solid var(--separator);
+  border-radius: 26px; padding: 30px 22px 26px; text-align: center;
+  box-shadow: 0 24px 80px rgba(0,0,0,.5);
+  animation: pop .45s cubic-bezier(.2,1.6,.4,1);
+}
+.modal-close {
+  position: absolute; top: 10px; right: 14px; width: 32px; height: 32px;
+  border: none; border-radius: 50%; background: var(--chip-bg); color: var(--dim);
+  font-size: 20px; line-height: 1; cursor: pointer;
+}
+.modal-close:active { transform: scale(.9); }
+.modal-label { font-size: 15px; color: var(--dim); letter-spacing: 3px; }
+.modal-names {
+  font-size: 42px; font-weight: 800; color: var(--yellow); letter-spacing: 3px;
+  margin: 14px 0 22px; line-height: 1.25; word-break: break-all;
+  text-shadow: 0 4px 30px rgba(255,214,10,.25);
+}
+.modal-actions { display: flex; flex-direction: column; gap: 12px; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
 input[type="text"], input[type="number"], textarea, select {
   width: 100%; background: var(--input-bg); color: var(--text);
   border: 1px solid var(--separator); border-radius: 12px; padding: 12px; font-size: 16px; outline: none;

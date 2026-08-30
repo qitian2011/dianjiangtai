@@ -19,7 +19,7 @@ function timeStr(ts) { const d = new Date(ts); return `${String(d.getHours()).pa
 const es = new EventSource('/events');
 es.onopen = () => { $('connBadge').textContent = '● 已连接'; $('connBadge').style.background = '#1d4d33'; };
 es.onerror = () => { $('connBadge').textContent = '● 重连中…'; $('connBadge').style.background = '#6b4a1d'; };
-es.onmessage = e => { const m = JSON.parse(e.data); if (m.event === 'state') { S = m.state; render(); } };
+es.onmessage = e => { const m = JSON.parse(e.data); if (m.event === 'state') { S = m.state; render(); maybeShowPickModal(); } };
 
 /* ---------- Tab 切换 ---------- */
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
@@ -216,3 +216,31 @@ $('voiceChips').addEventListener('click', e => { if (e.target.dataset.m) cmd({ a
 $('themeChips').addEventListener('click', e => { if (e.target.dataset.t) { window.__setTheme(e.target.dataset.t); render(); } });
 let volT = null;
 $('volSlider').oninput = e => { $('volText').textContent = e.target.value + '%'; clearTimeout(volT); volT = setTimeout(() => cmd({ action: 'setVolume', value: e.target.value / 100 }), 400); };
+
+/* ---------- 点名结果大弹窗（屏幕居中） ---------- */
+let modalSeenPickAt = null; // 已处理过的 lastPick.at（页面刚打开时不弹旧结果）
+function maybeShowPickModal() {
+  if (!S.lastPick) { closePickModal(); return; }
+  if (S.answering) { closePickModal(); return; }   // 开始答题即收起
+  if (modalSeenPickAt === null) { modalSeenPickAt = S.lastPick.at; return; }
+  if (S.lastPick.at !== modalSeenPickAt) { modalSeenPickAt = S.lastPick.at; openPickModal(); }
+}
+function openPickModal() {
+  const p = S.lastPick;
+  $('pickModalNames').textContent = (p.display || p.names).join('  ');
+  $('pickModalAsk').style.display = '';
+  $('pickModalTimers').style.display = 'none';
+  $('pickModal').style.display = '';
+}
+function closePickModal() { $('pickModal').style.display = 'none'; }
+$('pickModalClose').onclick = closePickModal;
+$('pickModal').addEventListener('click', e => { if (e.target === $('pickModal')) closePickModal(); });
+$('pickModalAskBtn').onclick = () => { $('pickModalAsk').style.display = 'none'; $('pickModalTimers').style.display = ''; };
+$('pickModalTimerChips').addEventListener('click', e => {
+  if (!e.target.dataset.d) return;
+  selTimer = +e.target.dataset.d;
+  syncChips('pickModalTimerChips', 'd', e.target.dataset.d);
+  cmd({ action: 'answerStart', duration: selTimer });
+  closePickModal();
+});
+$('pickModalSkipBtn').onclick = () => { cmd({ action: 'skip' }); closePickModal(); };
