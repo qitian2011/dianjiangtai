@@ -273,12 +273,13 @@ label.switch input:checked::after { transform: translateX(19px); }
 .screen .center { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 0 6vw; }
 .screen .title { font-size: 4.2vmin; color: var(--dim); letter-spacing: 8px; margin-bottom: 3vmin; font-weight: 600; }
 .screen .standby-name { font-size: 12vmin; font-weight: 800; color: var(--sub); opacity: .55; letter-spacing: 2vmin; user-select: none; }
-.screen .url-tip { position: absolute; bottom: 5vmin; left: 0; right: 0; text-align: center; font-size: 2.6vmin; color: var(--dim); }
+.screen .url-stack { position: absolute; bottom: 2vmin; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: .8vmin; }
+.screen .url-tip { text-align: center; font-size: 2.6vmin; color: var(--dim); }
 .screen .url-tip b { color: var(--accent); font-size: 3.4vmin; }
-.screen .url-list { position: absolute; bottom: 0.8vmin; left: 0; right: 0; text-align: center; }
+.screen .url-list { text-align: center; }
 .screen .url-list div { font-size: 3vmin; color: var(--accent); font-family: inherit; font-weight: 600; letter-spacing: .5px; padding: .4vmin 0; }
 .screen .url-list div + div { font-size: 2.4vmin; color: var(--dim); }
-.screen .qr-row { display: flex; gap: 6vmin; justify-content: center; margin-bottom: 2vmin; }
+.screen .qr-row { display: flex; flex-wrap: wrap; gap: 6vmin; justify-content: center; margin-bottom: 2vmin; max-width: 90vw; }
 .screen .qr-cell { text-align: center; }
 .screen .qr-cell svg { width: 24vmin; height: 24vmin; background: #fff; padding: 1vmin; border-radius: 2.2vmin; box-shadow: 0 0 40px var(--qr-glow); }
 .screen .qr-cell div { margin-top: 1vmin; font-size: 2.4vmin; color: var(--accent); }

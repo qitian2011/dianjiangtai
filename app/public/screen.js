@@ -258,9 +258,9 @@ function render() {
   // 教师端候选地址：服务端按网卡实时给出（网线/热点/USB共享自动适应）
   const urls = (S.ctrlUrls && S.ctrlUrls.length ? S.ctrlUrls : [location.href.replace('screen.html', 'ctrl.html')]);
   $('ctrlUrls').innerHTML = urls.map(u => `<div>${u}</div>`).join('');
-  // 二维码（每个候选地址一张，手机扫码直达控制端）
+  // 二维码（每个候选地址一张，手机扫码直达控制端；最多 3 张防挤爆，其余地址只显示文字）
   if (typeof qrcode === 'function' && S.ctrlUrls && S.ctrlUrls.length) {
-    $('qrRow').innerHTML = S.ctrlUrls.map((u, i) => {
+    $('qrRow').innerHTML = S.ctrlUrls.slice(0, 3).map((u, i) => {
       try {
         const qr = qrcode(0, 'M');
         qr.addData(u); qr.make();
