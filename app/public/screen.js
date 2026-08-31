@@ -185,6 +185,33 @@ $('classOverlay').addEventListener('click', async e => {
   location.href = location.pathname + '?room=' + encodeURIComponent(target.rid);
 });
 
+/* ---------- 大屏一周课表 ---------- */
+function renderTtTable() {
+  const tt = (S && S.tt) || { am: 4, pm: 3, cells: {} };
+  const days = ['周一', '周二', '周三', '周四', '周五'];
+  const today = new Date().getDay();   // 0=周日
+  $('ttTitle').textContent = (S ? S.className : '') + ' · 一 周 课 表';
+  let html = '<table class="screen-tt"><tr><th class="stt-slot"></th>' + days.map((d, i) => `<th class="${today === i + 1 ? 'today' : ''}">${d}</th>`).join('') + '</tr>';
+  for (let s = 0; s < tt.am + tt.pm; s++) {
+    const label = (s < tt.am ? '上午' : '下午') + (s < tt.am ? s + 1 : s - tt.am + 1) + '节';
+    html += `<tr><td class="stt-slot">${label}</td>`;
+    for (let d = 1; d <= 5; d++) {
+      const course = (tt.cells || {})[d + '_' + s];
+      html += `<td class="${today === d ? 'today' : ''}">${course ? course : '<span class="stt-empty">—</span>'}</td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
+  $('ttTable').innerHTML = html;
+}
+function toggleTt(show) {
+  $('ttOverlay').style.display = show ? '' : 'none';
+  if (show) renderTtTable();
+}
+$('ttBtn').onclick = () => toggleTt(true);
+$('ttClose').onclick = () => toggleTt(false);
+$('ttOverlay').addEventListener('click', e => { if (e.target === $('ttOverlay')) toggleTt(false); });
+
 /* ---------- 视图切换 ---------- */
 function view(name) {
   for (const v of ['standby', 'rolling', 'result', 'answering']) $(v).style.display = v === name ? '' : 'none';
@@ -272,6 +299,7 @@ function render() {
   // 答题结束后清理倒计时定时器（防止 tick 访问 null.answering 抛错）
   if (!S.answering && render._cdTimer) { clearInterval(render._cdTimer); render._cdTimer = null; }
   volume = S.volume; $('className').textContent = S.className;
+  if ($('ttOverlay') && $('ttOverlay').style.display !== 'none') renderTtTable();   // 课表打开时实时刷新
   // 时钟
   const d = new Date();
   $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;

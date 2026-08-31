@@ -56,6 +56,10 @@ export class Room {
       if (c.prefs.volume === undefined) c.prefs.volume = 0.3;
       if (c.prefs.animationMs === undefined) c.prefs.animationMs = 3000;
       if (c.prefs.voiceMode === undefined) c.prefs.voiceMode = 'sound';
+      if (!c.tt || typeof c.tt !== 'object') c.tt = { am: 4, pm: 3, cells: {} };
+      if (!c.tt.cells) c.tt.cells = {};
+      if (!c.tt.am) c.tt.am = 4;
+      if (!c.tt.pm) c.tt.pm = 3;
     });
     this.roster = roster;
   }
@@ -115,6 +119,7 @@ export class Room {
       students: cls.students.map(x => ({ name: x.name, sid: x.sid || '', group: x.group, weight: x.weight, pickedCount: x.pickedCount })),
       allClasses: this.roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass })),
       currentClass: this.roomClassIndex(roomId, room),
+      tt: cls.tt || { am: 4, pm: 3, cells: {} },
       places: this.roster.places,
       pickedThisRound: room.pickedThisRound,
       lastPick: room.lastPick,
@@ -300,6 +305,29 @@ export class Room {
       case 'setAnim': session.animationMs = [2000, 3000, 5000].includes(body.ms) ? body.ms : 3000; this.saveClassPrefs(roomId, session); break;
       case 'setRollStyle': session.rollStyle = 'classic'; break;
       case 'setVoiceMode': session.voiceMode = ['sound', 'ai', 'both'].includes(body.mode) ? body.mode : 'sound'; this.saveClassPrefs(roomId, session); break;
+      // 班级课表：节数配置 / 单格课程 / 清空（存班级对象，持久化）
+      case 'ttConfig': {
+        if (!cls) { ok = false; msg = '无班级'; break; }
+        const am = Math.min(8, Math.max(1, body.am | 0));
+        const pm = Math.min(8, Math.max(1, body.pm | 0));
+        cls.tt = { am, pm, cells: cls.tt && cls.tt.cells ? cls.tt.cells : {} };
+        this.saveRoster(); msg = `课表已设为上午${am}节、下午${pm}节`;
+        break;
+      }
+      case 'ttCell': {
+        if (!cls) { ok = false; msg = '无班级'; break; }
+        const day = body.day | 0, slot = body.slot | 0;
+        if (day < 1 || day > 5 || slot < 0 || slot >= (cls.tt.am + cls.tt.pm)) { ok = false; msg = '无效位置'; break; }
+        const course = String(body.course || '').trim().slice(0, 12);
+        if (course) cls.tt.cells[day + '_' + slot] = course; else delete cls.tt.cells[day + '_' + slot];
+        this.saveRoster();
+        break;
+      }
+      case 'ttClear': {
+        if (!cls) { ok = false; msg = '无班级'; break; }
+        cls.tt.cells = {}; this.saveRoster(); msg = '课表已清空';
+        break;
+      }
       case 'classSwitch': {
         const i = body.index | 0;
         if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }

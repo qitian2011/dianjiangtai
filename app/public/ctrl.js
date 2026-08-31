@@ -61,7 +61,7 @@ initSSE();
 /* ---------- Tab 切换 ---------- */
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('active', x === b));
-  for (const t of ['roll', 'page', 'roster', 'set']) $('tab-' + t).style.display = b.dataset.tab === t ? '' : 'none';
+  for (const t of ['roll', 'page', 'roster', 'tt', 'set']) $('tab-' + t).style.display = b.dataset.tab === t ? '' : 'none';
 });
 
 /* ---------- 渲染 ---------- */
@@ -125,6 +125,8 @@ function render() {
     ? S.groups.map(g => `<span class="chip">${g}<span class="del" data-g="${g}" style="color:var(--red);margin-left:6px;cursor:pointer">×</span></span>`).join('')
     : '<span style="color:var(--dim)">暂无分组，可在下方添加（不分组也完全可以正常点名）</span>';
   $('groupDatalist').innerHTML = (S.groups || []).map(g => `<option value="${g}">`).join('');
+  // 课表
+  renderTt();
   // 考试模式
   $('examChk').checked = S.examMode;
   // 设置
@@ -233,6 +235,37 @@ $('stuList').addEventListener('change', e => {
 $('addGroupBtn').onclick = () => { const v = $('newGroup').value.trim(); if (v) { cmd({ action: 'addGroup', name: v }); $('newGroup').value = ''; } };
 $('groupManage').addEventListener('click', e => { if (e.target.dataset.g && e.target.classList.contains('del')) cmd({ action: 'delGroup', name: e.target.dataset.g }); });
 $('resetStatsBtn').onclick = () => cmd({ action: 'resetStats' });
+
+/* ---------- 课表（按班级保存） ---------- */
+const TT_DAYS = ['周一', '周二', '周三', '周四', '周五'];
+function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+function renderTt() {
+  const tt = S.tt || { am: 4, pm: 3, cells: {} };
+  $('ttAmVal').textContent = tt.am; $('ttPmVal').textContent = tt.pm;
+  // 正在格子中输入时不重建，避免丢焦点
+  const grid = $('ttGrid');
+  if (document.activeElement && grid.contains(document.activeElement)) return;
+  let html = '<table class="tt-table"><tr><th class="tt-slot-h"></th>' + TT_DAYS.map(d => `<th>${d}</th>`).join('') + '</tr>';
+  for (let s = 0; s < tt.am + tt.pm; s++) {
+    const label = (s < tt.am ? '上午' : '下午') + (s < tt.am ? s + 1 : s - tt.am + 1) + '节';
+    html += `<tr><td class="tt-slot">${label}</td>`;
+    for (let d = 1; d <= 5; d++) {
+      html += `<td><input type="text" maxlength="12" placeholder="—" data-d="${d}" data-s="${s}" value="${esc(tt.cells[d + '_' + s] || '')}"></td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
+  grid.innerHTML = html;
+}
+$('ttAmMinus').onclick = () => cmd({ action: 'ttConfig', am: Math.max(1, (S.tt ? S.tt.am : 4) - 1), pm: S.tt ? S.tt.pm : 3 });
+$('ttAmPlus').onclick = () => cmd({ action: 'ttConfig', am: Math.min(8, (S.tt ? S.tt.am : 4) + 1), pm: S.tt ? S.tt.pm : 3 });
+$('ttPmMinus').onclick = () => cmd({ action: 'ttConfig', am: S.tt ? S.tt.am : 4, pm: Math.max(1, (S.tt ? S.tt.pm : 3) - 1) });
+$('ttPmPlus').onclick = () => cmd({ action: 'ttConfig', am: S.tt ? S.tt.am : 4, pm: Math.min(8, (S.tt ? S.tt.pm : 3) + 1) });
+$('ttClearBtn').onclick = () => { if (confirm('确定清空本班整周课表？')) cmd({ action: 'ttClear' }); };
+$('ttGrid').addEventListener('change', e => {
+  if (e.target.dataset.d === undefined) return;
+  cmd({ action: 'ttCell', day: +e.target.dataset.d, slot: +e.target.dataset.s, course: e.target.value.trim() });
+});
 
 /* ---------- 设置与其他 ---------- */
 // 切班 = 换 URL（班级即房间）：跳到目标班级的 rid 链接；加密班先验证密码

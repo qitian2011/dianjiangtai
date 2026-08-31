@@ -326,6 +326,24 @@ label.switch input:checked::after { transform: translateX(19px); }
 .screen .topbar .cls:hover { background: var(--accent); border-color: transparent; color: #fff; }
 .screen .topbar .cls:active { transform: scale(.97); }
 .screen .topbar .cls-hint { font-size: 14px; color: var(--dim); opacity: .7; }
+/* ===== 课表 ===== */
+/* 控制端编辑表格 */
+.tt-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tt-table th, .tt-table td { border: 1px solid var(--separator); padding: 4px 6px; text-align: center; }
+.tt-table th { background: var(--card2); color: var(--dim); font-weight: 600; }
+.tt-table .tt-slot { background: var(--card2); color: var(--dim); white-space: nowrap; font-size: 12px; width: 64px; }
+.tt-table td input { width: 100%; min-width: 64px; border: none; background: transparent; color: var(--text); text-align: center; font-size: 14px; padding: 4px 0; outline: none; }
+.tt-table td input:focus { background: var(--card2); border-radius: 6px; }
+/* 大屏课表弹层 */
+.tt-overlay { position: absolute; inset: 0; z-index: 30; background: rgba(0,0,0,.55); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); display: flex; align-items: center; justify-content: center; }
+.tt-card { background: var(--page-card-bg); border: 1px solid var(--separator); border-radius: 3vmin; padding: 4vmin 5vmin; text-align: center; max-width: 92vw; max-height: 84vh; overflow-y: auto; animation: pop .35s cubic-bezier(.2,1.6,.4,1); backdrop-filter: blur(40px) saturate(1.6); -webkit-backdrop-filter: blur(40px) saturate(1.6); box-shadow: 0 0 100px rgba(10,132,255,.18), 0 4vmin 10vmin rgba(0,0,0,.45); }
+.screen-tt { border-collapse: collapse; margin: 0 auto; }
+.screen-tt th, .screen-tt td { border: 1px solid var(--separator); padding: 1.4vmin 2.2vmin; font-size: 3.2vmin; color: var(--text); }
+.screen-tt th { background: var(--card2); color: var(--dim); font-weight: 600; }
+.screen-tt .stt-slot { background: var(--card2); color: var(--dim); white-space: nowrap; font-size: 2.6vmin; }
+.screen-tt th.today { color: #fff; background: var(--accent); }
+.screen-tt td.today { background: rgba(10,132,255,.14); }
+.screen-tt .stt-empty { opacity: .35; }
 /* 声音解锁提示浮层（首次点屏后消失） */
 .unlock-overlay { position: absolute; inset: 0; z-index: 200; background: rgba(5, 8, 16, .78); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); display: flex; align-items: center; justify-content: center; cursor: pointer; animation: fadeIn .3s ease; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

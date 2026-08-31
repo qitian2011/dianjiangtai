@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=10">
-<script src="theme.js?v=10"></script>
+<link rel="stylesheet" href="style.css?v=11">
+<script src="theme.js?v=11"></script>
 </head>
 <body>
 <div class="ctrl-wrap">
@@ -22,6 +22,7 @@
     <button data-tab="roll" class="active">点名答题</button>
     <button data-tab="page">传呼</button>
     <button data-tab="roster">名单</button>
+    <button data-tab="tt">课表</button>
     <button data-tab="set">设置</button>
   </div>
 
@@ -147,6 +148,33 @@
     </div>
   </div>
 
+  <!-- ============ 课表 ============ -->
+  <div id="tab-tt" style="display:none">
+    <div class="card">
+      <h3>节次设置</h3>
+      <div class="row" style="align-items:center; gap:8px">
+        <span>上午</span>
+        <button class="btn small" id="ttAmMinus">−</button>
+        <b id="ttAmVal" style="min-width:20px; text-align:center">4</b>
+        <button class="btn small" id="ttAmPlus">＋</button>
+        <span>节</span>
+        <span style="width:16px"></span>
+        <span>下午</span>
+        <button class="btn small" id="ttPmMinus">−</button>
+        <b id="ttPmVal" style="min-width:20px; text-align:center">3</b>
+        <button class="btn small" id="ttPmPlus">＋</button>
+        <span>节</span>
+        <span style="flex:1"></span>
+        <button class="btn small danger" id="ttClearBtn">🗑 清空课表</button>
+      </div>
+      <div style="font-size:13px; color:var(--dim); margin-top:8px">课表按班级保存，大屏点「📅 课表」即可显示整周课表；格子留空表示无课。</div>
+    </div>
+    <div class="card">
+      <h3>一周课程表（在格子里直接填课程名，改完自动保存）</h3>
+      <div id="ttGrid"></div>
+    </div>
+  </div>
+
   <!-- ============ 设置 ============ -->
   <div id="tab-set" style="display:none">
     <div class="card">
@@ -199,6 +227,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=10"></script>
+<script src="ctrl.js?v=11"></script>
 </body>
 </html>
