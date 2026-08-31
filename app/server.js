@@ -47,27 +47,39 @@ function absentNames(cls) {
   return cls.absent.names.filter(n => cls.students.some(s => s.name === n));
 }
 
-/* ---------------- 会话状态（不落盘，重启即清） ---------------- */
-const session = {
-  pickedThisRound: [],   // 本轮已点名单（不复读机用）
-  lastPick: null,        // {names:[...], at}
-  answering: null,       // {name, deadline, duration}
-  page: null,            // {names, place, from, note, duration, sentAt, confirmed, retracted}
-  examMode: false,
-  volume: 0.3,
-  animationMs: 3000,
-  rollStyle: 'classic', // 仅保留经典滚动（老虎机已移除）
-  voiceMode: 'sound', // 'sound'=仅提示音 | 'ai'=仅AI播报 | 'both'=提示音+AI播报
-  lessonLog: [],         // 本节课点名记录
-  pageLog: [],           // 今日传呼记录
-  unlocked: {}           // 已解锁班级 { index: true }（同一会话内输入过密码后不再重复询问）
-};
+/* ---------------- 多房间会话状态（不落盘，重启即清） ----------------
+ * 每个「房间」= 一间教室（一块大屏 + 一台控制手机）。
+ * 同房间两端联动；不同房间完全独立（各自班级/点名/答题/传呼）。
+ * URL 里 ?room=X 指定房间，默认 '1'（兼容老用法）。
+ */
+const rooms = new Map();
+function getRoom(id) {
+  id = String(id || '1').slice(0, 24);
+  if (!rooms.has(id)) {
+    rooms.set(id, {
+      currentClass: roster.currentClass,
+      pickedThisRound: [],   // 本轮已点名单（不复读机用）
+      lastPick: null,        // {names:[...], at}
+      answering: null,       // {name, deadline, duration}
+      page: null,            // {names, place, from, note, duration, sentAt, confirmed, retracted}
+      examMode: false,
+      volume: 0.3,
+      animationMs: 3000,
+      rollStyle: 'classic',
+      voiceMode: 'sound',
+      lessonLog: [],         // 本节课点名记录
+      pageLog: [],           // 今日传呼记录
+      unlocked: {}           // 已解锁班级 { index: true }
+    });
+  }
+  return rooms.get(id);
+}
 
-/* ---------------- SSE 客户端 ---------------- */
-const sseClients = new Set();
-function broadcast(event) {
+/* ---------------- SSE 客户端（按房间分组） ---------------- */
+const sseClients = new Set(); // { res, room }
+function broadcast(roomId, event) {
   const payload = `data: ${JSON.stringify(event)}\n\n`;
-  for (const res of sseClients) { try { res.write(payload); } catch (e) {} }
+  for (const c of sseClients) { if (c.room === roomId) { try { c.res.write(payload); } catch (e) { sseClients.delete(c); } } }
 }
 function lanIPs() {
   const out = [];
@@ -75,43 +87,45 @@ function lanIPs() {
   for (const k of Object.keys(nets)) for (const n of nets[k]) if (n.family === 'IPv4' && !n.internal) out.push(n.address);
   return out;
 }
-function pushState() { broadcast({ event: 'state', state: snapshot() }); }
-function snapshot() {
-  const cls = roster.classes[roster.currentClass] || { name: '', students: [] };
+function pushState(roomId) { broadcast(roomId, { event: 'state', state: snapshot(roomId) }); }
+function snapshot(roomId) {
+  const room = getRoom(roomId);
+  const cls = roster.classes[room.currentClass] || { name: '', students: [] };
+  const qs = roomId !== '1' ? '?room=' + encodeURIComponent(roomId) : '';
   return {
-    ctrlUrls: lanIPs().map(ip => `http://${ip}:${PORT}/ctrl.html`),
+    ctrlUrls: lanIPs().map(ip => `http://${ip}:${PORT}/ctrl.html${qs}`),
     className: cls.name,
     groups: cls.groups || [],
     students: cls.students.map(s => ({ name: s.name, sid: s.sid || '', group: s.group, weight: s.weight, pickedCount: s.pickedCount })),
     allClasses: roster.classes.map((c, i) => ({ i, name: c.name, locked: !!c.pass })),
-    currentClass: roster.currentClass,
+    currentClass: room.currentClass,
     places: roster.places,
-    pickedThisRound: session.pickedThisRound,
-    lastPick: session.lastPick,
-    answering: session.answering,
-    page: session.page,
-    examMode: session.examMode,
-    volume: session.volume,
-    animationMs: session.animationMs,
-    rollStyle: session.rollStyle,
-    voiceMode: session.voiceMode,
+    pickedThisRound: room.pickedThisRound,
+    lastPick: room.lastPick,
+    answering: room.answering,
+    page: room.page,
+    examMode: room.examMode,
+    volume: room.volume,
+    animationMs: room.animationMs,
+    rollStyle: room.rollStyle,
+    voiceMode: room.voiceMode,
     absentToday: absentNames(cls),
-    lessonLog: session.lessonLog.slice(-20),
-    pageLog: session.pageLog.slice(-50)
+    lessonLog: room.lessonLog.slice(-20),
+    pageLog: room.pageLog.slice(-50)
   };
 }
 
-/* ---------------- 加权抽取 ---------------- */
-function pickStudents({ group = null, count = 1, noRepeat = true } = {}) {
-  const cls = roster.classes[roster.currentClass];
+/* ---------------- 加权抽取（按房间） ---------------- */
+function pickStudents(room, { group = null, count = 1, noRepeat = true } = {}) {
+  const cls = roster.classes[room.currentClass];
   if (!cls) return [];
   const absent = absentNames(cls);
   let pool = cls.students.filter(s => !group || s.group === group);
   pool = pool.filter(s => !absent.includes(s.name)); // 今日请假自动跳过
   pool = pool.filter(s => (s.weight || 0) > 0);      // 权重 0 = 长期不点，直接排除（这是"调0"真正的生效点）
   if (noRepeat) {
-    const avail = pool.filter(s => !session.pickedThisRound.includes(s.name));
-    if (avail.length === 0) { session.pickedThisRound = []; pool = pool; } else pool = avail;
+    const avail = pool.filter(s => !room.pickedThisRound.includes(s.name));
+    if (avail.length === 0) { room.pickedThisRound = []; pool = pool; } else pool = avail;
   }
   if (pool.length === 0) return [];
   // 有效权重 = weight / (1 + pickedCount)：点过的人自动降权
@@ -136,8 +150,9 @@ function pickStudents({ group = null, count = 1, noRepeat = true } = {}) {
 }
 
 /* ---------------- 指令处理 ---------------- */
-function handleCmd(body, res) {
-  const cls = roster.classes[roster.currentClass];
+function handleCmd(body, res, roomId) {
+  const session = getRoom(roomId);
+  const cls = roster.classes[session.currentClass];
   const find = (name) => cls && cls.students.find(s => s.name === name);
   const disp = (s) => s.group ? `${s.name}(${s.group})` : s.name; // 显示名：带组名
   const now = Date.now();
@@ -145,7 +160,7 @@ function handleCmd(body, res) {
   switch (body.action) {
     case 'roll': {
       if (session.answering) { ok = false; msg = '答题进行中'; break; }
-      const picked = pickStudents(body);
+      const picked = pickStudents(session, body);
       if (picked.length === 0) {
         ok = false;
         const allZero = cls.students.length > 0 && cls.students.every(s => (s.weight || 0) <= 0);
@@ -159,13 +174,13 @@ function handleCmd(body, res) {
       const pool = cls.students.map(s => s.name).filter(n => !absentNames(cls).includes(n));
       picked.forEach(s => { s.pickedCount = (s.pickedCount || 0) + 1; session.pickedThisRound.push(s.name); });
       session.lessonLog.push({ names, display, at: now });
-      broadcast({ event: 'rollStart', duration: session.animationMs, pool });
+      broadcast(roomId, { event: 'rollStart', duration: session.animationMs, pool });
       const dur = Math.max(500, session.animationMs);
       setTimeout(() => {
         session.lastPick = { names, display, at: Date.now() };
         session.answering = null;
-        saveRoster(); pushState();
-        broadcast({ event: 'rollResult', names, display, students });
+        saveRoster(); pushState(roomId);
+        broadcast(roomId, { event: 'rollResult', names, display, students });
       }, dur);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true, rolling: true }));
@@ -175,7 +190,7 @@ function handleCmd(body, res) {
       if (!session.lastPick) { ok = false; msg = '请先点名'; break; }
       const d = body.duration | 0; // 秒，0=不限时
       session.answering = { name: (session.lastPick.display || session.lastPick.names).join('、'), deadline: d > 0 ? now + d * 1000 : 0, duration: d };
-      broadcast({ event: 'answerStart', duration: d });
+      broadcast(roomId, { event: 'answerStart', duration: d });
       break;
     }
     case 'mark': {
@@ -188,16 +203,16 @@ function handleCmd(body, res) {
       }
       session.answering = null;
       saveRoster();
-      broadcast({ event: 'marked', result: body.result });
+      broadcast(roomId, { event: 'marked', result: body.result });
       break;
     }
     case 'skip': {
       if (!session.lastPick) { ok = false; msg = '请先点名'; break; }
       for (const n of session.lastPick.names) { const s = find(n); if (s) s.skipped = (s.skipped || 0) + 1; }
       session.answering = null; session.lastPick = null;
-      saveRoster(); broadcast({ event: 'skipped' });
+      saveRoster(); broadcast(roomId, { event: 'skipped' });
       // 自动连抽下一名
-      const picked = pickStudents({ noRepeat: true });
+      const picked = pickStudents(session, { noRepeat: true });
       if (picked.length) {
         const names = picked.map(s => s.name);
         const display = picked.map(disp);
@@ -205,10 +220,10 @@ function handleCmd(body, res) {
         const pool2 = cls.students.map(s => s.name).filter(n => !absentNames(cls).includes(n));
         picked.forEach(s => { s.pickedCount = (s.pickedCount || 0) + 1; session.pickedThisRound.push(s.name); });
         session.lessonLog.push({ names, display, at: Date.now() });
-        broadcast({ event: 'rollStart', duration: session.animationMs, pool: pool2 });
+        broadcast(roomId, { event: 'rollStart', duration: session.animationMs, pool: pool2 });
         setTimeout(() => {
           session.lastPick = { names, display, at: Date.now() };
-          saveRoster(); pushState(); broadcast({ event: 'rollResult', names, display, students });
+          saveRoster(); pushState(roomId); broadcast(roomId, { event: 'rollResult', names, display, students });
         }, Math.max(500, session.animationMs));
       }
       break;
@@ -226,7 +241,7 @@ function handleCmd(body, res) {
         sentAt: now, confirmed: false, retracted: false
       };
       session.pageLog.push({ names, place: session.page.place, from: session.page.from, sentAt: now, confirmed: false, retracted: false });
-      broadcast({ event: 'page', page: session.page });
+      broadcast(roomId, { event: 'page', page: session.page });
       break;
     }
     case 'pageConfirm': if (session.page) { session.page.confirmed = true; session.pageLog.forEach(p => { if (!p.retracted && !p.confirmed) p.confirmed = true; }); } break;
@@ -244,7 +259,7 @@ function handleCmd(body, res) {
       if (target.pass && !session.unlocked[i] && String(body.pass || '') !== target.pass) {
         ok = false; msg = '需要班级密码'; break;
       }
-      roster.currentClass = i;
+      session.currentClass = i; roster.currentClass = i;
       if (target.pass) session.unlocked[i] = true;
       saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null;
       break;
@@ -260,7 +275,7 @@ function handleCmd(body, res) {
       const name = String(body.name || '').trim().slice(0, 20) || `新班级${roster.classes.length + 1}`;
       const pass = String(body.pass || '').trim().slice(0, 20);
       roster.classes.push({ name, groups: [], students: [], absent: { date: '', names: [] }, pass });
-      roster.currentClass = roster.classes.length - 1;
+      roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
       if (pass) session.unlocked[roster.currentClass] = true;
       session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
       saveRoster();
@@ -279,7 +294,7 @@ function handleCmd(body, res) {
       const nm = roster.classes[i].name;
       roster.classes.splice(i, 1);
       if (roster.currentClass >= roster.classes.length) roster.currentClass = roster.classes.length - 1;
-      delete session.unlocked[i];
+      rooms.forEach(r => { if (r.currentClass >= roster.classes.length) r.currentClass = roster.classes.length - 1; delete r.unlocked[i]; });
       session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
       saveRoster();
       msg = `已删除班级「${nm}」`;
@@ -305,7 +320,7 @@ function handleCmd(body, res) {
       const name = String(body.className || '').trim() || `导入班${roster.classes.length + 1}`;
       const groups = [...new Set(students.map(s => s.group).filter(Boolean))];
       roster.classes.push({ name, groups, students });
-      roster.currentClass = roster.classes.length - 1;
+      roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
       session.pickedThisRound = []; session.lastPick = null; session.answering = null;
       saveRoster();
       msg = `已导入「${name}」${students.length} 人`;
@@ -389,7 +404,7 @@ function handleCmd(body, res) {
     }
     default: ok = false; msg = '未知指令';
   }
-  pushState();
+  pushState(roomId);
   res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
   res.end(JSON.stringify({ ok, msg }));
 }
@@ -405,20 +420,22 @@ function readBody(req) {
 }
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
+  const roomId = url.searchParams.get('room') || '1';
   if (url.pathname === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'Access-Control-Allow-Origin': '*' });
-    res.write(`data: ${JSON.stringify({ event: 'state', state: snapshot() })}\n\n`);
-    sseClients.add(res);
-    req.on('close', () => sseClients.delete(res));
+    res.write(`data: ${JSON.stringify({ event: 'state', state: snapshot(roomId) })}\n\n`);
+    const client = { res, room: roomId };
+    sseClients.add(client);
+    req.on('close', () => sseClients.delete(client));
     return;
   }
   if (url.pathname === '/api/cmd' && req.method === 'POST') {
     const body = await readBody(req);
-    return handleCmd(body, res);
+    return handleCmd(body, res, roomId);
   }
   if (url.pathname === '/api/state') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(JSON.stringify(snapshot()));
+    return res.end(JSON.stringify(snapshot(roomId)));
   }
   // 静态文件
   let p = url.pathname === '/' ? '/screen.html' : url.pathname;

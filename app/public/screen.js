@@ -87,17 +87,18 @@ function speak(text) {
 }
 function voiceModeAllowsAI() { return S && (S.voiceMode === 'ai' || S.voiceMode === 'both'); }
 
-/* ---------- SSE（携带访问密码，密码错误时弹出输入框） ---------- */
+/* ---------- SSE（携带访问密码，?room=X 指定房间，同房间两端联动） ---------- */
 let es = null;
+const ROOM = new URLSearchParams(location.search).get('room') || '1';
 async function initSSE() {
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
   for (let i = 0; i < 3; i++) {
-    const r = await fetch('/api/state?pin=' + encodeURIComponent(pin)).catch(() => null);
+    const r = await fetch(`/api/state?room=${ROOM}&pin=${encodeURIComponent(pin)}`).catch(() => null);
     if (!r || r.status !== 401) break;
     pin = prompt('请输入访问密码') || '';
     localStorage.setItem('djPin', pin);
   }
-  es = new EventSource('/events?pin=' + encodeURIComponent(pin));
+  es = new EventSource(`/events?room=${ROOM}&pin=${encodeURIComponent(pin)}`);
   es.onmessage = (e) => {
     const msg = JSON.parse(e.data);
     if (msg.event === 'state') { S = msg.state; render(); }
@@ -123,7 +124,7 @@ function showMsg(t) {
 }
 async function apiCmd(body) {
   let pin = localStorage.getItem('djPin') || new URLSearchParams(location.search).get('pin') || '';
-  const r = await fetch('/api/cmd?pin=' + encodeURIComponent(pin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(`/api/cmd?room=${ROOM}&pin=${encodeURIComponent(pin)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (r.status === 401) { pin = prompt('请输入访问密码') || ''; localStorage.setItem('djPin', pin); return apiCmd(body); }
   return r.json().catch(() => ({}));
 }

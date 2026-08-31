@@ -37,15 +37,11 @@ export class Room {
   constructor(state, env) {
     this.state = state;
     this.env = env;
-    this.sse = new Set();       // SSE 连接集合
+    this.sse = new Set();       // SSE 连接集合 {push, close, room}
     this.hb = null;             // 心跳定时器
     this.origin = null;
     this.roster = null;
-    this.session = {
-      pickedThisRound: [], lastPick: null, answering: null, page: null,
-      examMode: false, volume: 0.3, animationMs: 3000, rollStyle: 'classic',
-      voiceMode: 'sound', lessonLog: [], pageLog: [], unlocked: {}
-    };
+    this.rooms = new Map();     // 多房间：{roomId: {currentClass, pickedThisRound, ...}}
     this.ready = this.init();
   }
   async init() {
@@ -56,46 +52,62 @@ export class Room {
     roster.classes.forEach(c => (c.students || []).forEach(s => { if (s.sid === undefined) s.sid = ''; }));
     this.roster = roster;
   }
+  getRoom(id) {
+    id = String(id || '1').slice(0, 24);
+    if (!this.rooms.has(id)) {
+      this.rooms.set(id, {
+        currentClass: this.roster.currentClass,
+        pickedThisRound: [], lastPick: null, answering: null, page: null,
+        examMode: false, volume: 0.3, animationMs: 3000, rollStyle: 'classic',
+        voiceMode: 'sound', lessonLog: [], pageLog: [], unlocked: {}
+      });
+    }
+    return this.rooms.get(id);
+  }
   saveRoster() { return this.state.storage.put('roster', this.roster); }
   absentNames(cls) {
     if (!cls || !cls.absent || cls.absent.date !== todayStr()) return [];
     return cls.absent.names.filter(n => cls.students.some(s => s.name === n));
   }
-  snapshot() {
-    const cls = this.roster.classes[this.roster.currentClass] || { name: '', students: [] };
-    const s = this.session;
+  snapshot(roomId) {
+    const room = this.getRoom(roomId);
+    const cls = this.roster.classes[room.currentClass] || { name: '', students: [] };
+    const qs = roomId !== '1' ? '?room=' + encodeURIComponent(roomId) : '';
     return {
-      ctrlUrls: [`${this.origin}/ctrl.html`],
+      ctrlUrls: [`${this.origin}/ctrl.html${qs}`],
       className: cls.name,
       groups: cls.groups || [],
       students: cls.students.map(x => ({ name: x.name, sid: x.sid || '', group: x.group, weight: x.weight, pickedCount: x.pickedCount })),
       allClasses: this.roster.classes.map((c, i) => ({ i, name: c.name, locked: !!c.pass })),
-      currentClass: this.roster.currentClass,
+      currentClass: room.currentClass,
       places: this.roster.places,
-      pickedThisRound: s.pickedThisRound,
-      lastPick: s.lastPick,
-      answering: s.answering,
-      page: s.page,
-      examMode: s.examMode,
-      volume: s.volume,
-      animationMs: s.animationMs,
-      rollStyle: s.rollStyle,
-      voiceMode: s.voiceMode,
+      pickedThisRound: room.pickedThisRound,
+      lastPick: room.lastPick,
+      answering: room.answering,
+      page: room.page,
+      examMode: room.examMode,
+      volume: room.volume,
+      animationMs: room.animationMs,
+      rollStyle: room.rollStyle,
+      voiceMode: room.voiceMode,
       absentToday: this.absentNames(cls),
-      lessonLog: s.lessonLog.slice(-20),
-      pageLog: s.pageLog.slice(-50)
+      lessonLog: room.lessonLog.slice(-20),
+      pageLog: room.pageLog.slice(-50)
     };
   }
   raw(payload) {
     for (const w of this.sse) { try { w.push(payload); } catch (e) { this.sse.delete(w); } }
   }
-  broadcast(event) { this.raw(`data: ${JSON.stringify(event)}\n\n`); }
-  pushState() { this.broadcast({ event: 'state', state: this.snapshot() }); }
+  broadcast(roomId, event) {
+    const payload = `data: ${JSON.stringify(event)}\n\n`;
+    for (const w of this.sse) { if (w.room === roomId) { try { w.push(payload); } catch (e) { this.sse.delete(w); } } }
+  }
+  pushState(roomId) { this.broadcast(roomId, { event: 'state', state: this.snapshot(roomId) }); }
   ensureHeartbeat() {
     if (this.hb) return;
     this.hb = setInterval(() => { if (this.sse.size) this.raw(': ping\n\n'); }, 25000);
   }
-  sseResponse() {
+  sseResponse(roomId) {
     this.ensureHeartbeat();
     const enc = new TextEncoder();
     let entry = null;
@@ -103,10 +115,11 @@ export class Room {
       start: (ctrl) => {
         entry = {
           push: (s) => ctrl.enqueue(enc.encode(s)),
-          close: () => { try { ctrl.close(); } catch (e) {} }
+          close: () => { try { ctrl.close(); } catch (e) {} },
+          room: roomId
         };
         this.sse.add(entry);
-        ctrl.enqueue(enc.encode(`data: ${JSON.stringify({ event: 'state', state: this.snapshot() })}\n\n`));
+        ctrl.enqueue(enc.encode(`data: ${JSON.stringify({ event: 'state', state: this.snapshot(roomId) })}\n\n`));
       },
       cancel: () => { if (entry) this.sse.delete(entry); }
     });
@@ -119,17 +132,17 @@ export class Room {
   }
 
   /* ---------------- 加权抽取 ---------------- */
-  pickStudents({ group = null, count = 1, noRepeat = true } = {}) {
-    const cls = this.roster.classes[this.roster.currentClass];
+  pickStudents(room, { group = null, count = 1, noRepeat = true } = {}) {
+    const cls = this.roster.classes[room.currentClass];
     if (!cls) return [];
     const absent = this.absentNames(cls);
     let pool = cls.students.filter(x => !group || x.group === group);
     pool = pool.filter(x => !absent.includes(x.name));
     pool = pool.filter(x => (x.weight || 0) > 0);
     if (noRepeat) {
-      const avail = pool.filter(x => !this.session.pickedThisRound.includes(x.name));
+      const avail = pool.filter(x => !room.pickedThisRound.includes(x.name));
       if (avail.length > 0) pool = avail;
-      else this.session.pickedThisRound = [];
+      else room.pickedThisRound = [];
     }
     if (pool.length === 0) return [];
     const weighted = [];
@@ -153,10 +166,10 @@ export class Room {
   }
 
   /* ---------------- 指令处理 ---------------- */
-  async handleCmd(body) {
+  async handleCmd(body, roomId) {
     await this.ready;
-    const roster = this.roster, session = this.session;
-    const cls = roster.classes[roster.currentClass];
+    const roster = this.roster, session = this.getRoom(roomId);
+    const cls = roster.classes[session.currentClass];
     const find = (name) => cls && cls.students.find(x => x.name === name);
     const disp = (x) => x.group ? `${x.name}(${x.group})` : x.name;
     const now = Date.now();
@@ -164,7 +177,7 @@ export class Room {
     switch (body.action) {
       case 'roll': {
         if (session.answering) { ok = false; msg = '答题进行中'; break; }
-        const picked = this.pickStudents(body);
+        const picked = this.pickStudents(session, body);
         if (picked.length === 0) {
           ok = false;
           const allZero = cls.students.length > 0 && cls.students.every(x => (x.weight || 0) <= 0);
@@ -177,13 +190,13 @@ export class Room {
         const pool = cls.students.map(x => x.name).filter(n => !this.absentNames(cls).includes(n));
         picked.forEach(x => { x.pickedCount = (x.pickedCount || 0) + 1; session.pickedThisRound.push(x.name); });
         session.lessonLog.push({ names, display, at: now });
-        this.broadcast({ event: 'rollStart', duration: session.animationMs, pool });
+        this.broadcast(roomId, { event: 'rollStart', duration: session.animationMs, pool });
         const dur = Math.max(500, session.animationMs);
         setTimeout(() => {
           session.lastPick = { names, display, at: Date.now() };
           session.answering = null;
-          this.saveRoster(); this.pushState();
-          this.broadcast({ event: 'rollResult', names, display, students });
+          this.saveRoster(); this.pushState(roomId);
+          this.broadcast(roomId, { event: 'rollResult', names, display, students });
         }, dur);
         // 与本地版一致：动画期间不推中间 state（否则大屏滚动视图会被打断），结果出来后再推
         return json({ ok: true, msg: '', rolling: true });
@@ -192,7 +205,7 @@ export class Room {
         if (!session.lastPick) { ok = false; msg = '请先点名'; break; }
         const d = body.duration | 0;
         session.answering = { name: (session.lastPick.display || session.lastPick.names).join('、'), deadline: d > 0 ? now + d * 1000 : 0, duration: d };
-        this.broadcast({ event: 'answerStart', duration: d });
+        this.broadcast(roomId, { event: 'answerStart', duration: d });
         break;
       }
       case 'mark': {
@@ -205,15 +218,15 @@ export class Room {
         }
         session.answering = null;
         this.saveRoster();
-        this.broadcast({ event: 'marked', result: body.result });
+        this.broadcast(roomId, { event: 'marked', result: body.result });
         break;
       }
       case 'skip': {
         if (!session.lastPick) { ok = false; msg = '请先点名'; break; }
         for (const n of session.lastPick.names) { const x = find(n); if (x) x.skipped = (x.skipped || 0) + 1; }
         session.answering = null; session.lastPick = null;
-        this.saveRoster(); this.broadcast({ event: 'skipped' });
-        const picked = this.pickStudents({ noRepeat: true });
+        this.saveRoster(); this.broadcast(roomId, { event: 'skipped' });
+        const picked = this.pickStudents(session, { noRepeat: true });
         if (picked.length) {
           const names = picked.map(x => x.name);
           const display = picked.map(disp);
@@ -221,10 +234,10 @@ export class Room {
           const pool2 = cls.students.map(x => x.name).filter(n => !this.absentNames(cls).includes(n));
           picked.forEach(x => { x.pickedCount = (x.pickedCount || 0) + 1; session.pickedThisRound.push(x.name); });
           session.lessonLog.push({ names, display, at: Date.now() });
-          this.broadcast({ event: 'rollStart', duration: session.animationMs, pool: pool2 });
+          this.broadcast(roomId, { event: 'rollStart', duration: session.animationMs, pool: pool2 });
           setTimeout(() => {
             session.lastPick = { names, display, at: Date.now() };
-            this.saveRoster(); this.pushState(); this.broadcast({ event: 'rollResult', names, display, students });
+            this.saveRoster(); this.pushState(roomId); this.broadcast(roomId, { event: 'rollResult', names, display, students });
           }, Math.max(500, session.animationMs));
         }
         break;
@@ -241,7 +254,7 @@ export class Room {
           sentAt: now, confirmed: false, retracted: false
         };
         session.pageLog.push({ names, place: session.page.place, from: session.page.from, sentAt: now, confirmed: false, retracted: false });
-        this.broadcast({ event: 'page', page: session.page });
+        this.broadcast(roomId, { event: 'page', page: session.page });
         break;
       }
       case 'pageConfirm': if (session.page) { session.page.confirmed = true; session.pageLog.forEach(p => { if (!p.retracted && !p.confirmed) p.confirmed = true; }); } break;
@@ -258,7 +271,7 @@ export class Room {
         if (target.pass && !session.unlocked[i] && String(body.pass || '') !== target.pass) {
           ok = false; msg = '需要班级密码'; break;
         }
-        roster.currentClass = i;
+        session.currentClass = i; roster.currentClass = i;
         if (target.pass) session.unlocked[i] = true;
         this.saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null;
         break;
@@ -274,7 +287,7 @@ export class Room {
         const name = String(body.name || '').trim().slice(0, 20) || `新班级${roster.classes.length + 1}`;
         const pass = String(body.pass || '').trim().slice(0, 20);
         roster.classes.push({ name, groups: [], students: [], absent: { date: '', names: [] }, pass });
-        roster.currentClass = roster.classes.length - 1;
+        roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
         if (pass) session.unlocked[roster.currentClass] = true;
         session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
         this.saveRoster();
@@ -292,7 +305,7 @@ export class Room {
         const nm = roster.classes[i].name;
         roster.classes.splice(i, 1);
         if (roster.currentClass >= roster.classes.length) roster.currentClass = roster.classes.length - 1;
-        delete session.unlocked[i];
+        this.rooms.forEach(r => { if (r.currentClass >= roster.classes.length) r.currentClass = roster.classes.length - 1; delete r.unlocked[i]; });
         session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
         this.saveRoster();
         msg = `已删除班级「${nm}」`;
@@ -318,7 +331,7 @@ export class Room {
         const name = String(body.className || '').trim() || `导入班${roster.classes.length + 1}`;
         const groups = [...new Set(students.map(x => x.group).filter(Boolean))];
         roster.classes.push({ name, groups, students });
-        roster.currentClass = roster.classes.length - 1;
+        roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
         session.pickedThisRound = []; session.lastPick = null; session.answering = null;
         this.saveRoster();
         msg = `已导入「${name}」${students.length} 人`;
@@ -402,7 +415,7 @@ export class Room {
       }
       default: ok = false; msg = '未知指令';
     }
-    this.pushState();
+    this.pushState(roomId);
     return json({ ok, msg });
   }
 
@@ -410,11 +423,12 @@ export class Room {
     await this.ready;
     const url = new URL(req.url);
     this.origin = url.origin;
-    if (url.pathname === '/events') return this.sseResponse();
-    if (url.pathname === '/api/state') return json(this.snapshot());
+    const roomId = url.searchParams.get('room') || '1';
+    if (url.pathname === '/events') return this.sseResponse(roomId);
+    if (url.pathname === '/api/state') return json(this.snapshot(roomId));
     if (url.pathname === '/api/cmd' && req.method === 'POST') {
       const body = await req.json().catch(() => ({}));
-      return this.handleCmd(body);
+      return this.handleCmd(body, roomId);
     }
     return json({ ok: false, msg: 'Not Found' }, 404);
   }

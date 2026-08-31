@@ -6,9 +6,10 @@ let lockRoll = false;
 const $ = id => document.getElementById(id);
 
 /* ---------- 工具 ---------- */
+const ROOM = new URLSearchParams(location.search).get('room') || '1';
 async function cmd(body) {
   const pin = localStorage.getItem('djPin') || '';
-  const r = await fetch('/api/cmd?pin=' + encodeURIComponent(pin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(`/api/cmd?room=${ROOM}&pin=${encodeURIComponent(pin)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (r.status === 401) {
     const p = prompt('请输入访问密码');
     if (p !== null) { localStorage.setItem('djPin', p); return cmd(body); }
@@ -21,17 +22,17 @@ async function cmd(body) {
 function toast(t) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => el.style.display = 'none', 2200); }
 function timeStr(ts) { const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 
-/* ---------- SSE（携带访问密码） ---------- */
+/* ---------- SSE（携带访问密码，?room=X 指定房间） ---------- */
 let es = null;
 async function initSSE() {
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
   for (let i = 0; i < 3; i++) {
-    const r = await fetch('/api/state?pin=' + encodeURIComponent(pin)).catch(() => null);
+    const r = await fetch(`/api/state?room=${ROOM}&pin=${encodeURIComponent(pin)}`).catch(() => null);
     if (!r || r.status !== 401) break;
     pin = prompt('请输入访问密码') || '';
     localStorage.setItem('djPin', pin);
   }
-  es = new EventSource('/events?pin=' + encodeURIComponent(pin));
+  es = new EventSource(`/events?room=${ROOM}&pin=${encodeURIComponent(pin)}`);
   es.onopen = () => { $('connBadge').textContent = '● 已连接'; $('connBadge').style.background = '#1d4d33'; };
   es.onerror = () => { $('connBadge').textContent = '● 重连中…'; $('connBadge').style.background = '#6b4a1d'; };
   es.onmessage = e => { const m = JSON.parse(e.data); if (m.event === 'state') { S = m.state; render(); maybeShowPickModal(); } };
@@ -215,6 +216,14 @@ $('groupManage').addEventListener('click', e => { if (e.target.dataset.g && e.ta
 $('resetStatsBtn').onclick = () => cmd({ action: 'resetStats' });
 
 /* ---------- 设置与其他 ---------- */
+$('roomBtn').textContent = ROOM === '1' ? '房间 1' : `房间 ${ROOM}`;
+$('roomBtn').onclick = () => {
+  const cur = ROOM === '1' ? '1' : ROOM;
+  const v = prompt(`当前房间：${cur}\n输入房间号（与大屏 ?room=X 一致即可联动，各房间互不影响）`, cur);
+  if (v === null) return;
+  const r = String(v).trim() || '1';
+  location.href = location.pathname + (r === '1' ? '' : '?room=' + encodeURIComponent(r));
+};
 $('classSel').onchange = async e => {
   const i = +e.target.value;
   if (i === S.currentClass) return;
