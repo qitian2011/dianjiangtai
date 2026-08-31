@@ -116,7 +116,11 @@ async function initSSE() {
     localStorage.setItem('djPin', pin);
   }
   es = new EventSource(`/events?room=${ROOM}&pin=${encodeURIComponent(pin)}`);
+  // 6 秒内没收到任何状态 → 显示连接失败提示（网址错/被墙/密码错/断网）
+  setTimeout(() => { if (!initSSE._gotState) { const el = $('connError'); if (el) el.style.display = ''; } }, 6000);
   es.onmessage = (e) => {
+    initSSE._gotState = true;
+    const el = $('connError'); if (el && el.style.display !== 'none') el.style.display = 'none';
     const msg = JSON.parse(e.data);
     if (msg.event === 'state') { S = msg.state; render(); }
     else if (msg.event === 'rollStart') startRoll(msg);

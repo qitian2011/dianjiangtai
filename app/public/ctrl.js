@@ -33,9 +33,16 @@ async function initSSE() {
     localStorage.setItem('djPin', pin);
   }
   es = new EventSource(`/events?room=${ROOM}&pin=${encodeURIComponent(pin)}`);
+  // 8 秒内没收到状态 → 提示（网址错/被墙/密码错/断网）
+  setTimeout(() => {
+    if (!initSSE._gotState) {
+      $('connBadge').textContent = '● 连接失败'; $('connBadge').style.background = '#7a1d1d';
+      toast('无法连接服务器：请检查网址(qitian.dpdns.org)/密码/网络');
+    }
+  }, 8000);
   es.onopen = () => { $('connBadge').textContent = '● 已连接'; $('connBadge').style.background = '#1d4d33'; };
   es.onerror = () => { $('connBadge').textContent = '● 重连中…'; $('connBadge').style.background = '#6b4a1d'; };
-  es.onmessage = e => { const m = JSON.parse(e.data); if (m.event === 'state') { S = m.state; render(); maybeShowPickModal(); } };
+  es.onmessage = e => { initSSE._gotState = true; const m = JSON.parse(e.data); if (m.event === 'state') { S = m.state; render(); maybeShowPickModal(); } };
 }
 initSSE();
 

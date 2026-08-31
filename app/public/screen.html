@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>课堂互动大屏 · 展示端</title>
-<link rel="stylesheet" href="style.css?v=5">
-<script src="theme.js?v=5"></script>
+<link rel="stylesheet" href="style.css?v=6">
+<script src="theme.js?v=6"></script>
 </head>
 <body class="screen">
   <!-- 传呼横条（缩小常驻） -->
@@ -33,6 +33,21 @@
       <div class="unlock-bell">🔊</div>
       <div class="unlock-text">点击屏幕任意位置开启声音</div>
       <div class="unlock-sub">点名提示音 / 传呼铃声 / AI 播报 都需要这一步</div>
+    </div>
+  </div>
+
+  <!-- 连接失败提示（网址错 / 被墙 / 密码错 / 断网时出现） -->
+  <div class="unlock-overlay" id="connError" style="display:none">
+    <div class="unlock-card">
+      <div class="unlock-bell">📡</div>
+      <div class="unlock-text">无法连接服务器</div>
+      <div class="unlock-sub">
+        请检查：<br>
+        ① 网址是 <b>qitian.dpdns.org</b>（不要用 workers.dev）<br>
+        ② 访问密码是否正确<br>
+        ③ 设备是否联网
+      </div>
+      <div class="unlock-sub" style="margin-top:2vmin; color:var(--accent); cursor:pointer" onclick="location.reload()">⟳ 点这里刷新重试</div>
     </div>
   </div>
 
@@ -88,7 +103,7 @@
 
   <div class="s-toast" id="screenToast"></div>
 
-<script src="vendor/qrcode.min.js?v=5"></script>
-<script src="screen.js?v=5"></script>
+<script src="vendor/qrcode.min.js?v=6"></script>
+<script src="screen.js?v=6"></script>
 </body>
 </html>
