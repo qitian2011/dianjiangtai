@@ -87,22 +87,33 @@ function speak(text) {
 }
 function voiceModeAllowsAI() { return S && (S.voiceMode === 'ai' || S.voiceMode === 'both'); }
 
-/* ---------- SSE ---------- */
-const es = new EventSource('/events');
-es.onmessage = (e) => {
-  const msg = JSON.parse(e.data);
-  if (msg.event === 'state') { S = msg.state; render(); }
-  else if (msg.event === 'rollStart') startRoll(msg);
-  else if (msg.event === 'rollResult') showResult(msg.names);
-  else if (msg.event === 'answerStart') showAnswerStart();
-  else if (msg.event === 'marked') showMark(msg.result);
-  else if (msg.event === 'skipped') { }
-  else if (msg.event === 'page') {
-    // 服务器先发 page 事件，再推 state；这里直接弹出大弹窗+音效，state 到达后不会再重复播放
-    if (msg.page) { S = S || {}; showPage(msg.page); }
+/* ---------- SSE（携带访问密码，密码错误时弹出输入框） ---------- */
+let es = null;
+async function initSSE() {
+  let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
+  for (let i = 0; i < 3; i++) {
+    const r = await fetch('/api/state?pin=' + encodeURIComponent(pin)).catch(() => null);
+    if (!r || r.status !== 401) break;
+    pin = prompt('请输入访问密码') || '';
+    localStorage.setItem('djPin', pin);
   }
-};
-es.onerror = () => { /* EventSource 自动重连 */ };
+  es = new EventSource('/events?pin=' + encodeURIComponent(pin));
+  es.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.event === 'state') { S = msg.state; render(); }
+    else if (msg.event === 'rollStart') startRoll(msg);
+    else if (msg.event === 'rollResult') showResult(msg.names);
+    else if (msg.event === 'answerStart') showAnswerStart();
+    else if (msg.event === 'marked') showMark(msg.result);
+    else if (msg.event === 'skipped') { }
+    else if (msg.event === 'page') {
+      // 服务器先发 page 事件，再推 state；这里直接弹出大弹窗+音效，state 到达后不会再重复播放
+      if (msg.page) { S = S || {}; showPage(msg.page); }
+    }
+  };
+  es.onerror = () => { /* EventSource 自动重连 */ };
+}
+initSSE();
 
 /* ---------- 视图切换 ---------- */
 function view(name) {

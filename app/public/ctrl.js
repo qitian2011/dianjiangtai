@@ -7,7 +7,13 @@ const $ = id => document.getElementById(id);
 
 /* ---------- 工具 ---------- */
 async function cmd(body) {
-  const r = await fetch('/api/cmd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const pin = localStorage.getItem('djPin') || '';
+  const r = await fetch('/api/cmd?pin=' + encodeURIComponent(pin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (r.status === 401) {
+    const p = prompt('请输入访问密码');
+    if (p !== null) { localStorage.setItem('djPin', p); return cmd(body); }
+    return { ok: false };
+  }
   const j = await r.json();
   if (j.msg) toast(j.msg);
   return j;
@@ -15,11 +21,22 @@ async function cmd(body) {
 function toast(t) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => el.style.display = 'none', 2200); }
 function timeStr(ts) { const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 
-/* ---------- SSE ---------- */
-const es = new EventSource('/events');
-es.onopen = () => { $('connBadge').textContent = '● 已连接'; $('connBadge').style.background = '#1d4d33'; };
-es.onerror = () => { $('connBadge').textContent = '● 重连中…'; $('connBadge').style.background = '#6b4a1d'; };
-es.onmessage = e => { const m = JSON.parse(e.data); if (m.event === 'state') { S = m.state; render(); maybeShowPickModal(); } };
+/* ---------- SSE（携带访问密码） ---------- */
+let es = null;
+async function initSSE() {
+  let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
+  for (let i = 0; i < 3; i++) {
+    const r = await fetch('/api/state?pin=' + encodeURIComponent(pin)).catch(() => null);
+    if (!r || r.status !== 401) break;
+    pin = prompt('请输入访问密码') || '';
+    localStorage.setItem('djPin', pin);
+  }
+  es = new EventSource('/events?pin=' + encodeURIComponent(pin));
+  es.onopen = () => { $('connBadge').textContent = '● 已连接'; $('connBadge').style.background = '#1d4d33'; };
+  es.onerror = () => { $('connBadge').textContent = '● 重连中…'; $('connBadge').style.background = '#6b4a1d'; };
+  es.onmessage = e => { const m = JSON.parse(e.data); if (m.event === 'state') { S = m.state; render(); maybeShowPickModal(); } };
+}
+initSSE();
 
 /* ---------- Tab 切换 ---------- */
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {

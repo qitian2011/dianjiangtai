@@ -1,0 +1,14 @@
+{
+  // 点将台 Cloudflare 部署配置（免费套餐：Workers + 静态资产 + SQLite Durable Object）
+  "name": "dianjiangtai",
+  "main": "worker.js",
+  "compatibility_date": "2025-05-05",
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  "durable_objects": { "bindings": [{ "name": "ROOM", "class_name": "Room" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  // 自定义域名：如需自动绑定，请给 API Token 加「Zone: Workers Routes: Edit」权限后取消下面注释再 deploy
+  // 手动方式（推荐，无需改 Token）：Cloudflare 后台 → Workers 和 Pages → dianjiangtai → 设置 → 域和路由 → 添加自定义域 qitian.dpdns.org
+  // "routes": [{ "pattern": "qitian.dpdns.org", "custom_domain": true }],
+  // 访问密码：改完这里重新 deploy 即可生效；设为 "" 则不启用密码（不推荐，名单会公开）
+  "vars": { "PIN": "2026" }
+}
