@@ -48,7 +48,7 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
 function render() {
   if (!S) return;
   // 班级选择
-  $('classSel').innerHTML = S.allClasses.map(c => `<option value="${c.i}" ${c.i === S.currentClass ? 'selected' : ''}>${c.name}</option>`).join('');
+  $('classSel').innerHTML = S.allClasses.map(c => `<option value="${c.i}" ${c.i === S.currentClass ? 'selected' : ''}>${c.locked ? '🔒 ' : ''}${c.name}</option>`).join('');
   // 分组chips（组由名单页自定义，无组时只显示"全班"）
   $('groupChips').innerHTML = `<span class="chip ${selGroup ? '' : 'sel'}" data-g="">全班</span>` +
     (S.groups || []).map(g => `<span class="chip ${selGroup === g ? 'sel' : ''}" data-g="${g}">${g}</span>`).join('');
@@ -209,16 +209,34 @@ $('groupManage').addEventListener('click', e => { if (e.target.dataset.g && e.ta
 $('resetStatsBtn').onclick = () => cmd({ action: 'resetStats' });
 
 /* ---------- 设置与其他 ---------- */
-$('classSel').onchange = e => cmd({ action: 'classSwitch', index: +e.target.value });
+$('classSel').onchange = async e => {
+  const i = +e.target.value;
+  if (i === S.currentClass) return;
+  const target = (S.allClasses || []).find(c => c.i === i);
+  let pass = '';
+  if (target && target.locked) {
+    pass = prompt(`班级「${target.name}」已加密，请输入密码：`, '') || '';
+    if (!pass) { render(); return; }
+  }
+  const j = await cmd({ action: 'classSwitch', index: i, pass });
+  if (!j.ok) render(); // 密码错误：恢复下拉框
+};
 $('addClassBtn').onclick = () => {
   const name = prompt('新建班级名称（留空自动命名）：', '');
   if (name === null) return;
-  cmd({ action: 'addClass', name: name.trim() });
+  const pass = prompt('可选：为该班级设置访问密码（留空 = 不加密；删除该班时也需要此密码）：', '');
+  if (pass === null) return;
+  cmd({ action: 'addClass', name: name.trim(), pass: pass.trim() });
 };
 $('delClassBtn').onclick = async () => {
   const cur = S ? S.className : '';
   if (!confirm(`确定删除班级「${cur}」？\n该班级的名单、分组、统计将一并删除，且不可恢复！`)) return;
-  await cmd({ action: 'delClass', index: S.currentClass, confirm: true });
+  let pass = '';
+  const curInfo = (S.allClasses || []).find(c => c.i === S.currentClass);
+  if (curInfo && curInfo.locked) {
+    pass = prompt(`班级「${cur}」已加密，删除需要输入密码：`, '') || '';
+  }
+  await cmd({ action: 'delClass', index: S.currentClass, confirm: true, pass });
 };
 $('renameClassBtn').onclick = () => {
   const cur = S ? S.className : '';

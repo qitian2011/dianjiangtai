@@ -44,7 +44,7 @@ export class Room {
     this.session = {
       pickedThisRound: [], lastPick: null, answering: null, page: null,
       examMode: false, volume: 0.3, animationMs: 3000, rollStyle: 'classic',
-      voiceMode: 'sound', lessonLog: [], pageLog: []
+      voiceMode: 'sound', lessonLog: [], pageLog: [], unlocked: {}
     };
     this.ready = this.init();
   }
@@ -67,7 +67,7 @@ export class Room {
       className: cls.name,
       groups: cls.groups || [],
       students: cls.students.map(x => ({ name: x.name, group: x.group, weight: x.weight, pickedCount: x.pickedCount })),
-      allClasses: this.roster.classes.map((c, i) => ({ i, name: c.name })),
+      allClasses: this.roster.classes.map((c, i) => ({ i, name: c.name, locked: !!c.pass })),
       currentClass: this.roster.currentClass,
       places: this.roster.places,
       pickedThisRound: s.pickedThisRound,
@@ -251,7 +251,14 @@ export class Room {
       case 'setVoiceMode': session.voiceMode = ['sound', 'ai', 'both'].includes(body.mode) ? body.mode : 'sound'; break;
       case 'classSwitch': {
         const i = body.index | 0;
-        if (roster.classes[i]) { roster.currentClass = i; this.saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null; }
+        if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
+        const target = roster.classes[i];
+        if (target.pass && !session.unlocked[i] && String(body.pass || '') !== target.pass) {
+          ok = false; msg = '需要班级密码'; break;
+        }
+        roster.currentClass = i;
+        if (target.pass) session.unlocked[i] = true;
+        this.saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null;
         break;
       }
       case 'renameClass': {
@@ -263,11 +270,13 @@ export class Room {
       }
       case 'addClass': {
         const name = String(body.name || '').trim().slice(0, 20) || `新班级${roster.classes.length + 1}`;
-        roster.classes.push({ name, groups: [], students: [], absent: { date: '', names: [] } });
+        const pass = String(body.pass || '').trim().slice(0, 20);
+        roster.classes.push({ name, groups: [], students: [], absent: { date: '', names: [] }, pass });
         roster.currentClass = roster.classes.length - 1;
+        if (pass) session.unlocked[roster.currentClass] = true;
         session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
         this.saveRoster();
-        msg = `已创建班级「${name}」`;
+        msg = pass ? `已创建班级「${name}」（已设置密码）` : `已创建班级「${name}」`;
         break;
       }
       case 'delClass': {
@@ -275,9 +284,13 @@ export class Room {
         if (body.confirm !== true) { ok = false; msg = '未确认删除'; break; }
         const i = (body.index !== undefined) ? (body.index | 0) : roster.currentClass;
         if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
+        if (roster.classes[i].pass && String(body.pass || '') !== roster.classes[i].pass) {
+          ok = false; msg = '需要班级密码'; break;
+        }
         const nm = roster.classes[i].name;
         roster.classes.splice(i, 1);
         if (roster.currentClass >= roster.classes.length) roster.currentClass = roster.classes.length - 1;
+        delete session.unlocked[i];
         session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
         this.saveRoster();
         msg = `已删除班级「${nm}」`;

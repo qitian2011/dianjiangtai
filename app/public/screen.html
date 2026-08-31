@@ -19,7 +19,8 @@
   <div class="lesson-log" id="lessonLog"></div>
 
   <div class="topbar">
-    <span class="cls" id="className">—</span>
+    <span class="cls" id="className" title="点击切换班级">—</span>
+    <span class="cls-hint">⇅ 切班</span>
     <span id="clock"></span>
   </div>
 
@@ -63,6 +64,17 @@
       <div class="p-from" id="pFrom"></div>
     </div>
   </div>
+
+  <!-- 班级选择（大屏端） -->
+  <div class="class-overlay" id="classOverlay" style="display:none">
+    <div class="class-card">
+      <div class="cc-title">选 择 班 级</div>
+      <div id="classList"></div>
+      <div class="cc-close" id="classClose">✕ 关闭</div>
+    </div>
+  </div>
+
+  <div class="s-toast" id="screenToast"></div>
 
 <script src="vendor/qrcode.min.js"></script>
 <script src="screen.js"></script>

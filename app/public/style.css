@@ -314,7 +314,18 @@ label.switch input:checked::after { transform: translateX(19px); }
   background: var(--topbar-bg); backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4);
   border-bottom: 1px solid var(--separator);
 }
-.screen .topbar .cls { font-weight: 700; color: var(--text); }
+.screen .topbar .cls { font-weight: 700; color: var(--text); cursor: pointer; padding: 2px 12px; border-radius: 10px; transition: background .2s; }
+.screen .topbar .cls:hover { background: var(--card2); }
+.screen .topbar .cls-hint { font-size: 14px; color: var(--dim); opacity: .7; }
+/* 大屏班级选择弹层 */
+.class-overlay { position: absolute; inset: 0; z-index: 30; background: rgba(0,0,0,.55); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); display: flex; align-items: center; justify-content: center; }
+.class-card { background: var(--page-card-bg); border: 1px solid var(--separator); border-radius: 3vmin; padding: 5vmin 6vmin; text-align: center; min-width: 64vmin; max-width: 88vw; max-height: 80vh; overflow-y: auto; animation: pop .35s cubic-bezier(.2,1.6,.4,1); backdrop-filter: blur(40px) saturate(1.6); -webkit-backdrop-filter: blur(40px) saturate(1.6); box-shadow: 0 0 100px rgba(10,132,255,.18), 0 4vmin 10vmin rgba(0,0,0,.45); }
+.class-card .cc-title { font-size: 4vmin; color: var(--dim); letter-spacing: 1vmin; margin-bottom: 3vmin; font-weight: 600; }
+.class-card .cc-item { display: block; width: 100%; margin: .9vmin 0; padding: 1.8vmin 3vmin; font-size: 3.4vmin; font-weight: 600; color: var(--text); background: var(--card2); border: 1px solid var(--separator); border-radius: 1.6vmin; cursor: pointer; transition: transform .12s ease, opacity .2s; }
+.class-card .cc-item:active { transform: scale(.97); opacity: .85; }
+.class-card .cc-item.cur { background: var(--accent); color: #fff; box-shadow: 0 0 30px rgba(10,132,255,.4); }
+.class-card .cc-close { margin-top: 2.5vmin; font-size: 2.8vmin; color: var(--dim); cursor: pointer; }
+.screen .s-toast { position: fixed; left: 50%; bottom: 12vmin; transform: translateX(-50%); background: var(--glass); color: var(--text); padding: 1.6vmin 4vmin; border-radius: 2vmin; font-size: 3vmin; z-index: 99; display: none; max-width: 86vw; text-align: center; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 10px 30px rgba(0,0,0,.4); border: 1px solid var(--separator); }
 .screen .center { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 0 6vw; }
 .screen .title { font-size: 4.2vmin; color: var(--dim); letter-spacing: 8px; margin-bottom: 3vmin; font-weight: 600; }
 .screen .standby-name { font-size: 12vmin; font-weight: 800; color: var(--sub); letter-spacing: 2vmin; user-select: none; animation: breathe 4s ease-in-out infinite; }

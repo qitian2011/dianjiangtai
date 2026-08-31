@@ -57,7 +57,8 @@ const session = {
   rollStyle: 'classic', // 仅保留经典滚动（老虎机已移除）
   voiceMode: 'sound', // 'sound'=仅提示音 | 'ai'=仅AI播报 | 'both'=提示音+AI播报
   lessonLog: [],         // 本节课点名记录
-  pageLog: []            // 今日传呼记录
+  pageLog: [],           // 今日传呼记录
+  unlocked: {}           // 已解锁班级 { index: true }（同一会话内输入过密码后不再重复询问）
 };
 
 /* ---------------- SSE 客户端 ---------------- */
@@ -80,7 +81,7 @@ function snapshot() {
     className: cls.name,
     groups: cls.groups || [],
     students: cls.students.map(s => ({ name: s.name, group: s.group, weight: s.weight, pickedCount: s.pickedCount })),
-    allClasses: roster.classes.map((c, i) => ({ i, name: c.name })),
+    allClasses: roster.classes.map((c, i) => ({ i, name: c.name, locked: !!c.pass })),
     currentClass: roster.currentClass,
     places: roster.places,
     pickedThisRound: session.pickedThisRound,
@@ -235,7 +236,15 @@ function handleCmd(body, res) {
     case 'setVoiceMode': session.voiceMode = ['sound', 'ai', 'both'].includes(body.mode) ? body.mode : 'sound'; break;
     case 'classSwitch': {
       const i = body.index | 0;
-      if (roster.classes[i]) { roster.currentClass = i; saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null; }
+      if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
+      const target = roster.classes[i];
+      // 有密码的班级：需输入密码（本会话解锁过则免）
+      if (target.pass && !session.unlocked[i] && String(body.pass || '') !== target.pass) {
+        ok = false; msg = '需要班级密码'; break;
+      }
+      roster.currentClass = i;
+      if (target.pass) session.unlocked[i] = true;
+      saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null;
       break;
     }
     case 'renameClass': {
@@ -247,11 +256,13 @@ function handleCmd(body, res) {
     }
     case 'addClass': {
       const name = String(body.name || '').trim().slice(0, 20) || `新班级${roster.classes.length + 1}`;
-      roster.classes.push({ name, groups: [], students: [], absent: { date: '', names: [] } });
+      const pass = String(body.pass || '').trim().slice(0, 20);
+      roster.classes.push({ name, groups: [], students: [], absent: { date: '', names: [] }, pass });
       roster.currentClass = roster.classes.length - 1;
+      if (pass) session.unlocked[roster.currentClass] = true;
       session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
       saveRoster();
-      msg = `已创建班级「${name}」`;
+      msg = pass ? `已创建班级「${name}」（已设置密码）` : `已创建班级「${name}」`;
       break;
     }
     case 'delClass': {
@@ -259,9 +270,14 @@ function handleCmd(body, res) {
       if (body.confirm !== true) { ok = false; msg = '未确认删除'; break; }
       const i = (body.index !== undefined) ? (body.index | 0) : roster.currentClass;
       if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
+      // 有密码的班级：删除需密码
+      if (roster.classes[i].pass && String(body.pass || '') !== roster.classes[i].pass) {
+        ok = false; msg = '需要班级密码'; break;
+      }
       const nm = roster.classes[i].name;
       roster.classes.splice(i, 1);
       if (roster.currentClass >= roster.classes.length) roster.currentClass = roster.classes.length - 1;
+      delete session.unlocked[i];
       session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
       saveRoster();
       msg = `已删除班级「${nm}」`;

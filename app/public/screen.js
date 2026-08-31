@@ -115,6 +115,46 @@ async function initSSE() {
 }
 initSSE();
 
+/* ---------- 大屏班级切换（有密码的班级需输入密码） ---------- */
+function showMsg(t) {
+  const el = $('screenToast');
+  el.textContent = t; el.style.display = 'block';
+  clearTimeout(showMsg._t); showMsg._t = setTimeout(() => el.style.display = 'none', 2400);
+}
+async function apiCmd(body) {
+  let pin = localStorage.getItem('djPin') || new URLSearchParams(location.search).get('pin') || '';
+  const r = await fetch('/api/cmd?pin=' + encodeURIComponent(pin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (r.status === 401) { pin = prompt('请输入访问密码') || ''; localStorage.setItem('djPin', pin); return apiCmd(body); }
+  return r.json().catch(() => ({}));
+}
+function toggleClassPicker(show) {
+  $('classOverlay').style.display = show ? '' : 'none';
+  if (show && S) {
+    $('classList').innerHTML = (S.allClasses || []).map(c => {
+      const cur = c.i === S.currentClass;
+      return `<button class="cc-item${cur ? ' cur' : ''}" data-i="${c.i}">${c.locked ? '🔒 ' : ''}${c.name}${cur ? '（当前）' : ''}</button>`;
+    }).join('');
+  }
+}
+$('className').onclick = () => toggleClassPicker(true);
+$('classClose').onclick = () => toggleClassPicker(false);
+$('classOverlay').addEventListener('click', async e => {
+  if (e.target === $('classOverlay')) { toggleClassPicker(false); return; }
+  const btn = e.target.closest('.cc-item');
+  if (!btn) return;
+  const i = +btn.dataset.i;
+  if (i === S.currentClass) { toggleClassPicker(false); return; }
+  const target = (S.allClasses || []).find(c => c.i === i);
+  let pass = '';
+  if (target && target.locked) {
+    pass = prompt(`班级「${target.name}」已加密，请输入密码：`, '') || '';
+    if (!pass) return;
+  }
+  const j = await apiCmd({ action: 'classSwitch', index: i, pass });
+  toggleClassPicker(false);
+  if (j && j.msg) showMsg(j.msg);
+});
+
 /* ---------- 视图切换 ---------- */
 function view(name) {
   for (const v of ['standby', 'rolling', 'result', 'answering']) $(v).style.display = v === name ? '' : 'none';
