@@ -314,8 +314,17 @@ label.switch input:checked::after { transform: translateX(19px); }
   background: var(--topbar-bg); backdrop-filter: blur(28px) saturate(1.4); -webkit-backdrop-filter: blur(28px) saturate(1.4);
   border-bottom: 1px solid var(--separator);
 }
-.screen .topbar .cls { font-weight: 700; color: var(--text); cursor: pointer; padding: 2px 12px; border-radius: 10px; transition: background .2s; }
-.screen .topbar .cls:hover { background: var(--card2); }
+.screen .topbar { gap: 12px; }
+.screen .topbar .tb-left { display: flex; align-items: center; gap: 10px; }
+.screen .topbar .cls {
+  font-weight: 700; color: var(--text); cursor: pointer;
+  padding: 4px 16px; border-radius: 14px;
+  background: var(--card2); border: 1px solid var(--separator);
+  backdrop-filter: blur(16px) saturate(1.4); -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  transition: background .2s, border-color .2s, transform .12s ease;
+}
+.screen .topbar .cls:hover { background: var(--accent); border-color: transparent; color: #fff; }
+.screen .topbar .cls:active { transform: scale(.97); }
 .screen .topbar .cls-hint { font-size: 14px; color: var(--dim); opacity: .7; }
 /* 大屏班级选择弹层 */
 .class-overlay { position: absolute; inset: 0; z-index: 30; background: rgba(0,0,0,.55); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); display: flex; align-items: center; justify-content: center; }

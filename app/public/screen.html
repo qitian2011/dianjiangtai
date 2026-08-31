@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>课堂互动大屏 · 展示端</title>
-<link rel="stylesheet" href="style.css">
-<script src="theme.js"></script>
+<link rel="stylesheet" href="style.css?v=4">
+<script src="theme.js?v=4"></script>
 </head>
 <body class="screen">
   <!-- 传呼横条（缩小常驻） -->
@@ -19,8 +19,10 @@
   <div class="lesson-log" id="lessonLog"></div>
 
   <div class="topbar">
-    <span class="cls" id="className" title="点击切换班级">—</span>
-    <span class="cls-hint">⇅ 切班</span>
+    <div class="tb-left">
+      <span class="cls" id="className" title="点击切换班级">—</span>
+      <span class="cls-hint">⇅ 切班</span>
+    </div>
     <span id="clock"></span>
   </div>
 
@@ -76,7 +78,7 @@
 
   <div class="s-toast" id="screenToast"></div>
 
-<script src="vendor/qrcode.min.js"></script>
-<script src="screen.js"></script>
+<script src="vendor/qrcode.min.js?v=4"></script>
+<script src="screen.js?v=4"></script>
 </body>
 </html>
