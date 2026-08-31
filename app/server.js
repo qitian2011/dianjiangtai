@@ -34,9 +34,15 @@ function defaultRoster() {
 function loadJSON(f) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return null; } }
 let roster = loadJSON(ROSTER_FILE) || defaultRoster();
 roster.classes.forEach(c => { if (!c.absent || typeof c.absent !== 'object') c.absent = { date: '', names: [] }; });
-// 老名单迁移：补学号字段 + 补班级房间ID(rid)
+// 老名单迁移：补学号字段 + 补班级房间ID(rid) + 补班级设置(prefs)
 roster.classes.forEach(c => (c.students || []).forEach(s => { if (s.sid === undefined) s.sid = ''; }));
-roster.classes.forEach((c, i) => { if (!c.rid) c.rid = genRid(c.name || '', i); });
+roster.classes.forEach((c, i) => {
+  if (!c.rid) c.rid = genRid(c.name || '', i);
+  if (!c.prefs) c.prefs = {};
+  if (c.prefs.volume === undefined) c.prefs.volume = 0.3;
+  if (c.prefs.animationMs === undefined) c.prefs.animationMs = 3000;
+  if (c.prefs.voiceMode === undefined) c.prefs.voiceMode = 'sound';
+});
 function saveRoster() { fs.writeFileSync(ROSTER_FILE, JSON.stringify(roster, null, 2), 'utf8'); }
 function todayStr() {
   const d = new Date();
@@ -68,8 +74,9 @@ function roomClassIndex(roomId, room) {
 function getRoom(id) {
   id = String(id || '1').slice(0, 24);
   if (!rooms.has(id)) {
-    // room 是某班级的 rid 时，该房间直接绑定这个班级；否则从第一个班级开始
+    // room 是某班级的 rid 时，该房间直接绑定这个班级，并载入该班已保存的设置；否则用默认值
     const idx = roster.classes.findIndex(c => c.rid === id);
+    const p = (idx >= 0 && roster.classes[idx].prefs) || {};
     rooms.set(id, {
       currentClass: idx >= 0 ? idx : 0,
       pickedThisRound: [],   // 本轮已点名单（不复读机用）
@@ -77,10 +84,10 @@ function getRoom(id) {
       answering: null,       // {name, deadline, duration}
       page: null,            // {names, place, from, note, duration, sentAt, confirmed, retracted}
       examMode: false,
-      volume: 0.3,
-      animationMs: 3000,
+      volume: p.volume !== undefined ? p.volume : 0.3,
+      animationMs: p.animationMs !== undefined ? p.animationMs : 3000,
       rollStyle: 'classic',
-      voiceMode: 'sound',
+      voiceMode: p.voiceMode !== undefined ? p.voiceMode : 'sound',
       lessonLog: [],         // 本节课点名记录
       pageLog: [],           // 今日传呼记录
       unlocked: {}           // 已解锁班级 { index: true }
@@ -91,6 +98,18 @@ function getRoom(id) {
 
 /* ---------------- SSE 客户端（按房间分组） ---------------- */
 const sseClients = new Set(); // { res, room }
+// 把某房间的音量/动画/提示方式写回其绑定班级的 prefs（rid 绑定才有归属；老式自定义房间不落盘）
+function saveClassPrefs(roomId, room) {
+  const idx = roster.classes.findIndex(c => c.rid === roomId);
+  if (idx >= 0) {
+    const cls = roster.classes[idx];
+    cls.prefs = cls.prefs || {};
+    cls.prefs.volume = room.volume;
+    cls.prefs.animationMs = room.animationMs;
+    cls.prefs.voiceMode = room.voiceMode;
+    saveRoster();
+  }
+}
 function broadcast(roomId, event) {
   const payload = `data: ${JSON.stringify(event)}\n\n`;
   for (const c of sseClients) { if (c.room === roomId) { try { c.res.write(payload); } catch (e) { sseClients.delete(c); } } }
@@ -262,10 +281,11 @@ function handleCmd(body, res, roomId) {
     case 'pageConfirm': if (session.page) { session.page.confirmed = true; session.pageLog.forEach(p => { if (!p.retracted && !p.confirmed) p.confirmed = true; }); } break;
     case 'pageRetract': if (session.page) { session.page.retracted = true; session.pageLog.forEach(p => { if (!p.confirmed) p.retracted = true; }); session.page = null; } break;
     case 'examMode': session.examMode = !!body.on; break;
-    case 'setVolume': session.volume = Math.min(1, Math.max(0, +body.value || 0)); break;
-    case 'setAnim': session.animationMs = [2000, 3000, 5000].includes(body.ms) ? body.ms : 3000; break;
+    // 班级设置：改动即写回班级 prefs 持久化（rid 绑定的房间），重启不丢
+    case 'setVolume': session.volume = Math.min(1, Math.max(0, +body.value || 0)); saveClassPrefs(roomId, session); break;
+    case 'setAnim': session.animationMs = [2000, 3000, 5000].includes(body.ms) ? body.ms : 3000; saveClassPrefs(roomId, session); break;
     case 'setRollStyle': session.rollStyle = 'classic'; break; // 兼容旧指令，样式已固定
-    case 'setVoiceMode': session.voiceMode = ['sound', 'ai', 'both'].includes(body.mode) ? body.mode : 'sound'; break;
+    case 'setVoiceMode': session.voiceMode = ['sound', 'ai', 'both'].includes(body.mode) ? body.mode : 'sound'; saveClassPrefs(roomId, session); break;
     case 'classSwitch': {
       const i = body.index | 0;
       if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }

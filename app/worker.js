@@ -50,7 +50,13 @@ export class Room {
     roster.classes.forEach(c => { if (!c.absent || typeof c.absent !== 'object') c.absent = { date: '', names: [] }; });
     // 老名单迁移：补学号字段 + 补班级房间ID(rid)
     roster.classes.forEach(c => (c.students || []).forEach(s => { if (s.sid === undefined) s.sid = ''; }));
-    roster.classes.forEach((c, i) => { if (!c.rid) c.rid = this.genRid(c.name || '', i); });
+    roster.classes.forEach((c, i) => {
+      if (!c.rid) c.rid = this.genRid(c.name || '', i);
+      if (!c.prefs) c.prefs = {};
+      if (c.prefs.volume === undefined) c.prefs.volume = 0.3;
+      if (c.prefs.animationMs === undefined) c.prefs.animationMs = 3000;
+      if (c.prefs.voiceMode === undefined) c.prefs.voiceMode = 'sound';
+    });
     this.roster = roster;
   }
   genRid(name, i) {
@@ -67,16 +73,33 @@ export class Room {
     id = String(id || '1').slice(0, 24);
     if (!this.rooms.has(id)) {
       const idx = this.roster.classes.findIndex(c => c.rid === id);
+      const p = (idx >= 0 && this.roster.classes[idx].prefs) || {};
       this.rooms.set(id, {
         currentClass: idx >= 0 ? idx : 0,   // room 是班级 rid 时绑定该班级，否则从第一个班级开始
         pickedThisRound: [], lastPick: null, answering: null, page: null,
-        examMode: false, volume: 0.3, animationMs: 3000, rollStyle: 'classic',
-        voiceMode: 'sound', lessonLog: [], pageLog: [], unlocked: {}
+        examMode: false,
+        volume: p.volume !== undefined ? p.volume : 0.3,
+        animationMs: p.animationMs !== undefined ? p.animationMs : 3000,
+        rollStyle: 'classic',
+        voiceMode: p.voiceMode !== undefined ? p.voiceMode : 'sound',
+        lessonLog: [], pageLog: [], unlocked: {}
       });
     }
     return this.rooms.get(id);
   }
   saveRoster() { return this.state.storage.put('roster', this.roster); }
+  // 把房间设置写回其绑定班级的 prefs（rid 绑定才有归属；老式自定义房间不落盘）
+  saveClassPrefs(roomId, room) {
+    const idx = this.roster.classes.findIndex(c => c.rid === roomId);
+    if (idx >= 0) {
+      const cls = this.roster.classes[idx];
+      cls.prefs = cls.prefs || {};
+      cls.prefs.volume = room.volume;
+      cls.prefs.animationMs = room.animationMs;
+      cls.prefs.voiceMode = room.voiceMode;
+      this.saveRoster();
+    }
+  }
   absentNames(cls) {
     if (!cls || !cls.absent || cls.absent.date !== todayStr()) return [];
     return cls.absent.names.filter(n => cls.students.some(s => s.name === n));
@@ -273,10 +296,10 @@ export class Room {
       case 'pageConfirm': if (session.page) { session.page.confirmed = true; session.pageLog.forEach(p => { if (!p.retracted && !p.confirmed) p.confirmed = true; }); } break;
       case 'pageRetract': if (session.page) { session.page.retracted = true; session.pageLog.forEach(p => { if (!p.confirmed) p.retracted = true; }); session.page = null; } break;
       case 'examMode': session.examMode = !!body.on; break;
-      case 'setVolume': session.volume = Math.min(1, Math.max(0, +body.value || 0)); break;
-      case 'setAnim': session.animationMs = [2000, 3000, 5000].includes(body.ms) ? body.ms : 3000; break;
+      case 'setVolume': session.volume = Math.min(1, Math.max(0, +body.value || 0)); this.saveClassPrefs(roomId, session); break;
+      case 'setAnim': session.animationMs = [2000, 3000, 5000].includes(body.ms) ? body.ms : 3000; this.saveClassPrefs(roomId, session); break;
       case 'setRollStyle': session.rollStyle = 'classic'; break;
-      case 'setVoiceMode': session.voiceMode = ['sound', 'ai', 'both'].includes(body.mode) ? body.mode : 'sound'; break;
+      case 'setVoiceMode': session.voiceMode = ['sound', 'ai', 'both'].includes(body.mode) ? body.mode : 'sound'; this.saveClassPrefs(roomId, session); break;
       case 'classSwitch': {
         const i = body.index | 0;
         if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
