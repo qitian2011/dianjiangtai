@@ -106,7 +106,6 @@ function voiceModeAllowsAI() { return S && (S.voiceMode === 'ai' || S.voiceMode 
 /* ---------- SSE（携带访问密码，?room=X 指定房间，同房间两端联动） ---------- */
 let es = null;
 const ROOM = new URLSearchParams(location.search).get('room') || '1';
-(function initRoomBadge() { const b = document.getElementById('roomBadge'); if (b) b.textContent = '房 ' + ROOM; })();
 async function initSSE() {
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
   // 服务器未设密码（PIN 为空）时直接放行；设了密码且未通过则弹一次，取消就不再反复弹
@@ -153,7 +152,7 @@ function toggleClassPicker(show) {
   $('classOverlay').style.display = show ? '' : 'none';
   if (show && S) {
     $('classList').innerHTML = (S.allClasses || []).map(c => {
-      const cur = c.i === S.currentClass;
+      const cur = c.rid === ROOM;   // 当前班级 = URL 里的班级rid
       return `<button class="cc-item${cur ? ' cur' : ''}" data-i="${c.i}">${c.locked ? '🔒 ' : ''}${c.name}${cur ? '（当前）' : ''}</button>`;
     }).join('');
   }
@@ -165,17 +164,17 @@ $('classOverlay').addEventListener('click', async e => {
   const btn = e.target.closest('.cc-item');
   if (!btn) return;
   const i = +btn.dataset.i;
-  if (i === S.currentClass) { toggleClassPicker(false); return; }
-  // 先无密码尝试（服务端会话已解锁过则直接通过，避免重复询问）
-  let j = await apiCmd({ action: 'classSwitch', index: i });
-  if (j && !j.ok && j.msg === '需要班级密码') {
-    const target = (S.allClasses || []).find(c => c.i === i);
-    const pass = prompt(`班级「${target ? target.name : ''}」已加密，请输入密码：`, '') || '';
+  const target = (S.allClasses || []).find(c => c.i === i);
+  if (!target || target.rid === ROOM) { toggleClassPicker(false); return; }   // 已是这个班
+  // 切班 = 换 URL（班级即房间）：加密班先验证密码
+  if (target.locked) {
+    const pass = prompt(`班级「${target.name}」已加密，请输入密码：`, '') || '';
     if (!pass) { toggleClassPicker(false); return; }
-    j = await apiCmd({ action: 'classSwitch', index: i, pass });
+    const j = await apiCmd({ action: 'classSwitch', index: i, pass });
+    if (!j.ok) { toggleClassPicker(false); if (j && j.msg) showMsg(j.msg); return; }
   }
   toggleClassPicker(false);
-  if (j && j.msg) showMsg(j.msg);
+  location.href = location.pathname + '?room=' + encodeURIComponent(target.rid);
 });
 
 /* ---------- 视图切换 ---------- */
@@ -268,7 +267,6 @@ function render() {
   // 答题结束后清理倒计时定时器（防止 tick 访问 null.answering 抛错）
   if (!S.answering && render._cdTimer) { clearInterval(render._cdTimer); render._cdTimer = null; }
   volume = S.volume; $('className').textContent = S.className;
-  if ($('roomBadge')) $('roomBadge').textContent = '房 ' + ROOM;
   // 时钟
   const d = new Date();
   $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;

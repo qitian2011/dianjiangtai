@@ -34,8 +34,9 @@ function defaultRoster() {
 function loadJSON(f) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return null; } }
 let roster = loadJSON(ROSTER_FILE) || defaultRoster();
 roster.classes.forEach(c => { if (!c.absent || typeof c.absent !== 'object') c.absent = { date: '', names: [] }; });
-// 老名单迁移：补学号字段
+// 老名单迁移：补学号字段 + 补班级房间ID(rid)
 roster.classes.forEach(c => (c.students || []).forEach(s => { if (s.sid === undefined) s.sid = ''; }));
+roster.classes.forEach((c, i) => { if (!c.rid) c.rid = genRid(c.name || '', i); });
 function saveRoster() { fs.writeFileSync(ROSTER_FILE, JSON.stringify(roster, null, 2), 'utf8'); }
 function todayStr() {
   const d = new Date();
@@ -48,16 +49,24 @@ function absentNames(cls) {
 }
 
 /* ---------------- 多房间会话状态（不落盘，重启即清） ----------------
- * 每个「房间」= 一间教室（一块大屏 + 一台控制手机）。
- * 同房间两端联动；不同房间完全独立（各自班级/点名/答题/传呼）。
- * URL 里 ?room=X 指定房间，默认 '1'（兼容老用法）。
+ * 每个「房间」= 一个班级空间（一块大屏 + 一台控制手机）。
+ * URL ?room=X：X 是班级的房间ID(rid)，一个班级一个稳定ID；
+ * 切班 = 把 URL 换成目标班级的 rid（前端直接跳转，不再调用 classSwitch）。
+ * 同 room 两端联动；不同 room（不同班级）完全独立。默认 '1' 兼容老用法。
  */
+function genRid(name, i) {
+  let h = 2166136261;
+  for (const ch of (name + '#' + i)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); }
+  return 'c' + (h >>> 0).toString(36);
+}
 const rooms = new Map();
 function getRoom(id) {
   id = String(id || '1').slice(0, 24);
   if (!rooms.has(id)) {
+    // room 是某班级的 rid 时，该房间直接绑定这个班级；否则从第一个班级开始
+    const idx = roster.classes.findIndex(c => c.rid === id);
     rooms.set(id, {
-      currentClass: 0,   // 新房间一律从第一个班级开始（不继承别的房间，避免"自动跟班"的错觉）
+      currentClass: idx >= 0 ? idx : 0,
       pickedThisRound: [],   // 本轮已点名单（不复读机用）
       lastPick: null,        // {names:[...], at}
       answering: null,       // {name, deadline, duration}
@@ -97,7 +106,7 @@ function snapshot(roomId) {
     className: cls.name,
     groups: cls.groups || [],
     students: cls.students.map(s => ({ name: s.name, sid: s.sid || '', group: s.group, weight: s.weight, pickedCount: s.pickedCount })),
-    allClasses: roster.classes.map((c, i) => ({ i, name: c.name, locked: !!c.pass })),
+    allClasses: roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass })),
     currentClass: room.currentClass,
     places: roster.places,
     pickedThisRound: room.pickedThisRound,
@@ -274,7 +283,7 @@ function handleCmd(body, res, roomId) {
     case 'addClass': {
       const name = String(body.name || '').trim().slice(0, 20) || `新班级${roster.classes.length + 1}`;
       const pass = String(body.pass || '').trim().slice(0, 20);
-      roster.classes.push({ name, groups: [], students: [], absent: { date: '', names: [] }, pass });
+      roster.classes.push({ name, rid: genRid(name, roster.classes.length), groups: [], students: [], absent: { date: '', names: [] }, pass });
       roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
       if (pass) session.unlocked[roster.currentClass] = true;
       session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
@@ -319,7 +328,7 @@ function handleCmd(body, res, roomId) {
       if (students.length === 0) { ok = false; msg = '没有解析到有效名单'; break; }
       const name = String(body.className || '').trim() || `导入班${roster.classes.length + 1}`;
       const groups = [...new Set(students.map(s => s.group).filter(Boolean))];
-      roster.classes.push({ name, groups, students });
+      roster.classes.push({ name, rid: genRid(name, roster.classes.length), groups, students });
       roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
       session.pickedThisRound = []; session.lastPick = null; session.answering = null;
       saveRoster();

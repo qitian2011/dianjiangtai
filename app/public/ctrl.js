@@ -223,26 +223,19 @@ $('groupManage').addEventListener('click', e => { if (e.target.dataset.g && e.ta
 $('resetStatsBtn').onclick = () => cmd({ action: 'resetStats' });
 
 /* ---------- 设置与其他 ---------- */
-$('roomBtn').textContent = ROOM === '1' ? '房间 1' : `房间 ${ROOM}`;
-$('roomBtn').onclick = () => {
-  const cur = ROOM === '1' ? '1' : ROOM;
-  const v = prompt(`当前房间：${cur}\n输入房间号（与大屏 ?room=X 一致即可联动，各房间互不影响）`, cur);
-  if (v === null) return;
-  const r = String(v).trim() || '1';
-  location.href = location.pathname + (r === '1' ? '' : '?room=' + encodeURIComponent(r));
-};
+// 切班 = 换 URL（班级即房间）：跳到目标班级的 rid 链接；加密班先验证密码
 $('classSel').onchange = async e => {
   const i = +e.target.value;
-  if (i === S.currentClass) return;
-  // 先无密码尝试（服务端会话已解锁过则直接通过，避免重复询问）
-  let j = await cmd({ action: 'classSwitch', index: i });
-  if (j && !j.ok && j.msg === '需要班级密码') {
-    const target = (S.allClasses || []).find(c => c.i === i);
-    const pass = prompt(`班级「${target ? target.name : ''}」已加密，请输入密码：`, '') || '';
+  const target = (S.allClasses || []).find(c => c.i === i);
+  if (!target) { render(); return; }
+  if (target.rid === ROOM) { render(); return; }   // 已经是这个班
+  if (target.locked) {
+    const pass = prompt(`班级「${target.name}」已加密，请输入密码：`, '') || '';
     if (!pass) { render(); return; }
-    j = await cmd({ action: 'classSwitch', index: i, pass });
+    const j = await cmd({ action: 'classSwitch', index: i, pass });
+    if (!j.ok) { render(); return; }
   }
-  if (!j.ok) render(); // 失败：恢复下拉框
+  location.href = location.pathname + '?room=' + encodeURIComponent(target.rid);
 };
 $('addClassBtn').onclick = () => {
   const name = prompt('新建班级名称（留空自动命名）：', '');

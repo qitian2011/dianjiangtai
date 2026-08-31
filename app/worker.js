@@ -48,15 +48,22 @@ export class Room {
     let roster = await this.state.storage.get('roster');
     if (!roster) roster = defaultRoster();
     roster.classes.forEach(c => { if (!c.absent || typeof c.absent !== 'object') c.absent = { date: '', names: [] }; });
-    // 老名单迁移：补学号字段
+    // 老名单迁移：补学号字段 + 补班级房间ID(rid)
     roster.classes.forEach(c => (c.students || []).forEach(s => { if (s.sid === undefined) s.sid = ''; }));
+    roster.classes.forEach((c, i) => { if (!c.rid) c.rid = this.genRid(c.name || '', i); });
     this.roster = roster;
+  }
+  genRid(name, i) {
+    let h = 2166136261;
+    for (const ch of (name + '#' + i)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); }
+    return 'c' + (h >>> 0).toString(36);
   }
   getRoom(id) {
     id = String(id || '1').slice(0, 24);
     if (!this.rooms.has(id)) {
+      const idx = this.roster.classes.findIndex(c => c.rid === id);
       this.rooms.set(id, {
-        currentClass: 0,   // 新房间一律从第一个班级开始（不继承别的房间，避免"自动跟班"的错觉）
+        currentClass: idx >= 0 ? idx : 0,   // room 是班级 rid 时绑定该班级，否则从第一个班级开始
         pickedThisRound: [], lastPick: null, answering: null, page: null,
         examMode: false, volume: 0.3, animationMs: 3000, rollStyle: 'classic',
         voiceMode: 'sound', lessonLog: [], pageLog: [], unlocked: {}
@@ -78,7 +85,7 @@ export class Room {
       className: cls.name,
       groups: cls.groups || [],
       students: cls.students.map(x => ({ name: x.name, sid: x.sid || '', group: x.group, weight: x.weight, pickedCount: x.pickedCount })),
-      allClasses: this.roster.classes.map((c, i) => ({ i, name: c.name, locked: !!c.pass })),
+      allClasses: this.roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass })),
       currentClass: room.currentClass,
       places: this.roster.places,
       pickedThisRound: room.pickedThisRound,
@@ -286,7 +293,7 @@ export class Room {
       case 'addClass': {
         const name = String(body.name || '').trim().slice(0, 20) || `新班级${roster.classes.length + 1}`;
         const pass = String(body.pass || '').trim().slice(0, 20);
-        roster.classes.push({ name, groups: [], students: [], absent: { date: '', names: [] }, pass });
+        roster.classes.push({ name, rid: this.genRid(name, roster.classes.length), groups: [], students: [], absent: { date: '', names: [] }, pass });
         roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
         if (pass) session.unlocked[roster.currentClass] = true;
         session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
@@ -330,7 +337,7 @@ export class Room {
         if (students.length === 0) { ok = false; msg = '没有解析到有效名单'; break; }
         const name = String(body.className || '').trim() || `导入班${roster.classes.length + 1}`;
         const groups = [...new Set(students.map(x => x.group).filter(Boolean))];
-        roster.classes.push({ name, groups, students });
+        roster.classes.push({ name, rid: this.genRid(name, roster.classes.length), groups, students });
         roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
         session.pickedThisRound = []; session.lastPick = null; session.answering = null;
         this.saveRoster();

@@ -326,7 +326,6 @@ label.switch input:checked::after { transform: translateX(19px); }
 .screen .topbar .cls:hover { background: var(--accent); border-color: transparent; color: #fff; }
 .screen .topbar .cls:active { transform: scale(.97); }
 .screen .topbar .cls-hint { font-size: 14px; color: var(--dim); opacity: .7; }
-.screen .room-badge { font-size: 14px; font-weight: 600; color: var(--accent); background: var(--card2); border: 1px solid var(--separator); border-radius: 12px; padding: 2px 12px; letter-spacing: .5px; }
 /* 声音解锁提示浮层（首次点屏后消失） */
 .unlock-overlay { position: absolute; inset: 0; z-index: 200; background: rgba(5, 8, 16, .78); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); display: flex; align-items: center; justify-content: center; cursor: pointer; animation: fadeIn .3s ease; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
