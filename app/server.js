@@ -57,7 +57,7 @@ function getRoom(id) {
   id = String(id || '1').slice(0, 24);
   if (!rooms.has(id)) {
     rooms.set(id, {
-      currentClass: roster.currentClass,
+      currentClass: 0,   // 新房间一律从第一个班级开始（不继承别的房间，避免"自动跟班"的错觉）
       pickedThisRound: [],   // 本轮已点名单（不复读机用）
       lastPick: null,        // {names:[...], at}
       answering: null,       // {name, deadline, duration}

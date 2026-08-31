@@ -56,7 +56,7 @@ export class Room {
     id = String(id || '1').slice(0, 24);
     if (!this.rooms.has(id)) {
       this.rooms.set(id, {
-        currentClass: this.roster.currentClass,
+        currentClass: 0,   // 新房间一律从第一个班级开始（不继承别的房间，避免"自动跟班"的错觉）
         pickedThisRound: [], lastPick: null, answering: null, page: null,
         examMode: false, volume: 0.3, animationMs: 3000, rollStyle: 'classic',
         voiceMode: 'sound', lessonLog: [], pageLog: [], unlocked: {}
