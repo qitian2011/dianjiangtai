@@ -173,7 +173,7 @@ button, input, select, textarea { font-family: inherit; }
   background: var(--card2); color: var(--text); border: 1px solid var(--separator);
   border-radius: 12px; padding: 8px 10px; font-size: 15px; outline: none; transition: border-color .2s, box-shadow .2s;
 }
-.ctrl-header .class-sel { max-width: 120px; flex-shrink: 0; }
+.ctrl-header .class-sel { width: auto; max-width: 200px; flex-shrink: 0; }
 .ctrl-header .class-actions { display: flex; gap: 6px; flex-shrink: 0; }
 .ctrl-header .exam-switch { margin-left: auto; flex-shrink: 0; }
 .ctrl-header select:focus, .ctrl-header input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255,.22); }
