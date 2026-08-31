@@ -292,10 +292,10 @@ function render() {
   if (!S.answering && render._cdTimer) { clearInterval(render._cdTimer); render._cdTimer = null; }
   volume = S.volume; $('className').textContent = S.className;
   renderTtTable();   // 待机页课表常驻
-  // 公告栏（有公告则显示在课表上方）
+  // 公告栏（左侧面板：有公告则显示，长文可滚动）
   const notice = S.notice && S.notice.text ? S.notice.text : '';
-  if (notice) { $('noticeBar').style.display = ''; $('noticeTextEl').textContent = notice; }
-  else $('noticeBar').style.display = 'none';
+  if (notice) { $('noticePanel').style.display = ''; $('noticeTextEl').textContent = notice; }
+  else $('noticePanel').style.display = 'none';
   // 传呼待处理堆叠：右下角累积未点"已到"的传呼
   const pend = (S.pageLog || []).filter(p => !p.confirmed && !p.retracted);
   const stackEl = $('pageStack');

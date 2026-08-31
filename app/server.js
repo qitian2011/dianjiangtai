@@ -316,6 +316,18 @@ function handleCmd(body, res, roomId) {
       cls.tt.cells = {}; saveRoster(); msg = '课表已清空';
       break;
     }
+    case 'setClassPass': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const old = String(body.old || '');
+      if (cls.pass && old !== cls.pass) { ok = false; msg = '原密码不正确'; break; }
+      const pass = String(body.pass || '').trim().slice(0, 20);
+      cls.pass = pass || '';
+      const ci = roster.classes.indexOf(cls);
+      rooms.forEach(r => { delete r.unlocked[ci]; });   // 改密后旧解锁全部失效
+      saveRoster();
+      msg = pass ? '班级密码已设置' : '班级密码已移除';
+      break;
+    }
     case 'setNotice': {
       if (!cls) { ok = false; msg = '无班级'; break; }
       const text = String(body.text || '').trim().slice(0, 120);

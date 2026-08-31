@@ -131,6 +131,9 @@ function render() {
   if (document.activeElement !== $('noticeText')) $('noticeText').value = (S.notice && S.notice.text) || '';
   // 考试模式
   $('examChk').checked = S.examMode;
+  // 班级密码状态
+  const curCls = (S.allClasses || []).find(c => c.i === S.currentClass);
+  $('classPassStatus').textContent = curCls && curCls.locked ? '当前：已加密（切换班级 / 删除该班需密码）' : '当前：未加密';
   // 设置
   $('connInfo').textContent = `控制端: ${location.href}\n大屏: ${location.href.replace('ctrl.html', 'screen.html')}`.replace(/\n/g, '　|　');
   $('volSlider').value = Math.round((S.volume || 0.3) * 100);
@@ -271,6 +274,23 @@ $('ttGrid').addEventListener('change', e => {
 /* 公告栏：发布/清除（按班级保存，大屏待机页常驻） */
 $('noticeSaveBtn').onclick = () => cmd({ action: 'setNotice', text: $('noticeText').value.trim() });
 $('noticeClearBtn').onclick = () => { if (confirm('确定清除当前公告？')) cmd({ action: 'setNotice', text: '' }); };
+/* 班级密码：设置/修改/移除（改密需原密码，移除需原密码） */
+$('setClassPassBtn').onclick = async () => {
+  const cur = (S.allClasses || []).find(c => c.i === S.currentClass);
+  let old = '';
+  if (cur && cur.locked) {
+    old = prompt(`「${S.className}」已加密，请输入原密码：`, '') || '';
+  }
+  const pass = prompt('设置新密码（留空 = 移除密码，最长 20 位）：', '');
+  if (pass === null) return;
+  await cmd({ action: 'setClassPass', old, pass: pass.trim() });
+};
+$('clearClassPassBtn').onclick = async () => {
+  const cur = (S.allClasses || []).find(c => c.i === S.currentClass);
+  if (!cur || !cur.locked) { toast('当前班级未加密'); return; }
+  const old = prompt('输入当前密码以移除加密：', '') || '';
+  await cmd({ action: 'setClassPass', old, pass: '' });
+};
 
 /* ---------- 设置与其他 ---------- */
 // 切班 = 换 URL（班级即房间）：跳到目标班级的 rid 链接；加密班先验证密码
