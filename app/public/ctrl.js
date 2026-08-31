@@ -127,6 +127,8 @@ function render() {
   $('groupDatalist').innerHTML = (S.groups || []).map(g => `<option value="${g}">`).join('');
   // 课表
   renderTt();
+  // 公告栏（输入中不被状态刷新覆盖）
+  if (document.activeElement !== $('noticeText')) $('noticeText').value = (S.notice && S.notice.text) || '';
   // 考试模式
   $('examChk').checked = S.examMode;
   // 设置
@@ -266,6 +268,9 @@ $('ttGrid').addEventListener('change', e => {
   if (e.target.dataset.d === undefined) return;
   cmd({ action: 'ttCell', day: +e.target.dataset.d, slot: +e.target.dataset.s, course: e.target.value.trim() });
 });
+/* 公告栏：发布/清除（按班级保存，大屏待机页常驻） */
+$('noticeSaveBtn').onclick = () => cmd({ action: 'setNotice', text: $('noticeText').value.trim() });
+$('noticeClearBtn').onclick = () => { if (confirm('确定清除当前公告？')) cmd({ action: 'setNotice', text: '' }); };
 
 /* ---------- 设置与其他 ---------- */
 // 切班 = 换 URL（班级即房间）：跳到目标班级的 rid 链接；加密班先验证密码

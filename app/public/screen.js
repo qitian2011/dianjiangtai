@@ -292,6 +292,20 @@ function render() {
   if (!S.answering && render._cdTimer) { clearInterval(render._cdTimer); render._cdTimer = null; }
   volume = S.volume; $('className').textContent = S.className;
   renderTtTable();   // 待机页课表常驻
+  // 公告栏（有公告则显示在课表上方）
+  const notice = S.notice && S.notice.text ? S.notice.text : '';
+  if (notice) { $('noticeBar').style.display = ''; $('noticeTextEl').textContent = notice; }
+  else $('noticeBar').style.display = 'none';
+  // 传呼待处理堆叠：右下角累积未点"已到"的传呼
+  const pend = (S.pageLog || []).filter(p => !p.confirmed && !p.retracted);
+  const stackEl = $('pageStack');
+  if (pend.length) {
+    stackEl.innerHTML = pend.slice().reverse().map(p => {
+      const t = new Date(p.sentAt), ts = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+      return `<div class="ps-item">👤 <b>${p.names.join('、')}</b> → ${p.place}${p.from ? ' · 找' + p.from : ''}<span class="ps-time">${ts}</span></div>`;
+    }).join('');
+    stackEl.style.display = '';
+  } else { stackEl.style.display = 'none'; stackEl.innerHTML = ''; }
   // 时钟
   const d = new Date();
   $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;

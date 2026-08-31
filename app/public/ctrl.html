@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=12">
-<script src="theme.js?v=12"></script>
+<link rel="stylesheet" href="style.css?v=13">
+<script src="theme.js?v=13"></script>
 </head>
 <body>
 <div class="ctrl-wrap">
@@ -151,6 +151,15 @@
   <!-- ============ 课表 ============ -->
   <div id="tab-tt" style="display:none">
     <div class="card">
+      <h3>📢 公告栏（发布后大屏待机页常驻显示，按班级保存）</h3>
+      <textarea id="noticeText" rows="2" maxlength="120" placeholder="输入公告内容，如：今天下午第三节课后交作业" style="width:100%"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn small primary" id="noticeSaveBtn">📢 发布公告</button>
+        <button class="btn small danger" id="noticeClearBtn">清除公告</button>
+        <span style="font-size:12px; color:var(--dim)">最长 120 字</span>
+      </div>
+    </div>
+    <div class="card">
       <h3>节次设置</h3>
       <div class="row" style="align-items:center; gap:8px">
         <span>上午</span>
@@ -227,6 +236,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=12"></script>
+<script src="ctrl.js?v=13"></script>
 </body>
 </html>

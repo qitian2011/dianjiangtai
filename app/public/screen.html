@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>课堂互动大屏 · 展示端</title>
-<link rel="stylesheet" href="style.css?v=12">
-<script src="theme.js?v=12"></script>
+<link rel="stylesheet" href="style.css?v=13">
+<script src="theme.js?v=13"></script>
 </head>
 <body class="screen">
   <!-- 传呼横条（缩小常驻） -->
@@ -54,6 +54,7 @@
     <!-- 待机：课表常驻展示 -->
     <div id="standby">
       <div class="title">课 堂 互 动 大 屏</div>
+      <div class="notice-bar" id="noticeBar" style="display:none"><span class="nb-icon">📢</span><span id="noticeTextEl"></span></div>
       <div id="standbyTt"></div>
       <div class="qr-corner" id="qrCorner"></div>
     </div>
@@ -87,6 +88,9 @@
     </div>
   </div>
 
+  <!-- 传呼待处理堆叠（右下角，未点"已到"的传呼在此累积） -->
+  <div class="page-stack" id="pageStack"></div>
+
   <!-- 班级选择（大屏端） -->
   <div class="class-overlay" id="classOverlay" style="display:none">
     <div class="class-card">
@@ -98,7 +102,7 @@
 
   <div class="s-toast" id="screenToast"></div>
 
-<script src="vendor/qrcode.min.js?v=12"></script>
-<script src="screen.js?v=12"></script>
+<script src="vendor/qrcode.min.js?v=13"></script>
+<script src="screen.js?v=13"></script>
 </body>
 </html>

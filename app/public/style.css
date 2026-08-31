@@ -347,6 +347,13 @@ label.switch input:checked::after { transform: translateX(19px); }
 .screen .qr-corner { position: absolute; right: 3vmin; bottom: 3vmin; text-align: center; z-index: 6; }
 .screen .qr-corner svg { width: 13vmin; height: 13vmin; background: #fff; padding: .8vmin; border-radius: 1.2vmin; box-shadow: 0 1vmin 3vmin rgba(0,0,0,.35); }
 .screen .qr-corner-label { margin-top: .6vmin; font-size: 1.8vmin; color: var(--dim); }
+/* 公告栏：待机页课表上方 */
+.screen .notice-bar { max-width: 78vw; margin: 0 auto 2vmin; padding: 1.4vmin 3vmin; border-radius: 1.6vmin; background: var(--card2); border: 1px solid var(--separator); font-size: 3vmin; color: var(--text); display: flex; align-items: center; gap: 1.5vmin; box-shadow: 0 1vmin 3vmin rgba(0,0,0,.25); backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4); }
+.screen .notice-bar .nb-icon { font-size: 3.8vmin; }
+/* 传呼待处理堆叠（右下角，位于二维码上方） */
+.screen .page-stack { position: absolute; right: 3vmin; bottom: 20vmin; z-index: 25; display: flex; flex-direction: column; gap: 1vmin; align-items: flex-end; }
+.screen .ps-item { background: var(--glass); border: 1px solid var(--separator); border-radius: 1.4vmin; padding: 1.1vmin 2vmin; font-size: 2.6vmin; color: var(--text); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); box-shadow: 0 1vmin 3vmin rgba(0,0,0,.3); max-width: 52vmin; animation: fadeIn .25s ease; }
+.screen .ps-time { margin-left: 1.2vmin; color: var(--dim); font-size: 2.2vmin; }
 /* 声音解锁提示浮层（首次点屏后消失） */
 .unlock-overlay { position: absolute; inset: 0; z-index: 200; background: rgba(5, 8, 16, .78); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); display: flex; align-items: center; justify-content: center; cursor: pointer; animation: fadeIn .3s ease; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }

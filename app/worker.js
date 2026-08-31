@@ -60,6 +60,7 @@ export class Room {
       if (!c.tt.cells) c.tt.cells = {};
       if (!c.tt.am) c.tt.am = 4;
       if (!c.tt.pm) c.tt.pm = 3;
+      if (!c.notice || typeof c.notice !== 'object') c.notice = { text: '', at: 0 };
     });
     this.roster = roster;
   }
@@ -120,6 +121,7 @@ export class Room {
       allClasses: this.roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass })),
       currentClass: this.roomClassIndex(roomId, room),
       tt: cls.tt || { am: 4, pm: 3, cells: {} },
+      notice: cls.notice || { text: '', at: 0 },
       places: this.roster.places,
       pickedThisRound: room.pickedThisRound,
       lastPick: room.lastPick,
@@ -326,6 +328,13 @@ export class Room {
       case 'ttClear': {
         if (!cls) { ok = false; msg = '无班级'; break; }
         cls.tt.cells = {}; this.saveRoster(); msg = '课表已清空';
+        break;
+      }
+      case 'setNotice': {
+        if (!cls) { ok = false; msg = '无班级'; break; }
+        const text = String(body.text || '').trim().slice(0, 120);
+        cls.notice = { text, at: text ? Date.now() : 0 };
+        this.saveRoster(); msg = text ? '公告已发布' : '公告已清除';
         break;
       }
       case 'classSwitch': {
