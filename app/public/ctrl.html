@@ -4,18 +4,20 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=16">
-<script src="theme.js?v=16"></script>
+<link rel="stylesheet" href="style.css?v=17">
+<script src="theme.js?v=17"></script>
 </head>
 <body>
 <div class="ctrl-wrap">
   <div class="ctrl-header">
-    <select id="classSel" style="width:auto"></select>
-    <button class="btn small" id="addClassBtn" title="新建班级">➕ 新建</button>
-    <button class="btn small" id="delClassBtn" title="删除当前班级" style="color:#ff5d5d">🗑 删除</button>
-    <button class="btn small" id="renameClassBtn" title="修改当前班级名称">✏️ 改名</button>
+    <select id="classSel" class="class-sel"></select>
+    <div class="class-actions">
+      <button class="btn small" id="addClassBtn" title="新建班级">➕ 新建</button>
+      <button class="btn small" id="delClassBtn" title="删除当前班级" style="color:#ff5d5d">🗑 删除</button>
+      <button class="btn small" id="renameClassBtn" title="修改当前班级名称">✏️ 改名</button>
+    </div>
     <span class="badge" id="connBadge">连接中…</span>
-    <label class="switch" style="margin-left:auto"><input type="checkbox" id="examChk">考试模式</label>
+    <label class="switch exam-switch"><input type="checkbox" id="examChk">考试模式</label>
   </div>
 
   <div class="tabs">
@@ -244,6 +246,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=16"></script>
+<script src="ctrl.js?v=17"></script>
 </body>
 </html>
