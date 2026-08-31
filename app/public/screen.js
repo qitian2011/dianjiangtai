@@ -185,21 +185,22 @@ $('classOverlay').addEventListener('click', async e => {
   location.href = location.pathname + '?room=' + encodeURIComponent(target.rid);
 });
 
-/* ---------- 大屏一周课表（待机页常驻，分段胶囊式） ---------- */
+/* ---------- 大屏一周课表（待机页常驻，老式表格排版） ---------- */
 function renderTtTable() {
   const tt = (S && S.tt) || { am: 4, pm: 3, cells: {} };
   const days = ['周一', '周二', '周三', '周四', '周五'];
   const today = new Date().getDay();   // 0=周日
-  let html = '<div class="stt-days"><span class="stt-day-corner"></span>' + days.map((d, i) => `<span class="stt-day${today === i + 1 ? ' today' : ''}">${d}</span>`).join('') + '</div>';
+  let html = '<table class="screen-tt"><tr><th class="stt-slot"></th>' + days.map((d, i) => `<th class="${today === i + 1 ? 'today' : ''}">${d}</th>`).join('') + '</tr>';
   for (let s = 0; s < tt.am + tt.pm; s++) {
     const label = (s < tt.am ? '上午' : '下午') + (s < tt.am ? s + 1 : s - tt.am + 1) + '节';
-    html += '<div class="stt-row"><span class="stt-label">' + label + '</span>';
+    html += `<tr><td class="stt-slot">${label}</td>`;
     for (let d = 1; d <= 5; d++) {
       const course = (tt.cells || {})[d + '_' + s];
-      html += `<span class="stt-cell${today === d ? ' today' : ''}${course ? ' filled' : ''}">${course || '·'}</span>`;
+      html += `<td class="${today === d ? 'today' : ''}">${course ? course : '<span class="stt-empty">—</span>'}</td>`;
     }
-    html += '</div>';
+    html += '</tr>';
   }
+  html += '</table>';
   $('standbyTt').innerHTML = html;
 }
 

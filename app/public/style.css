@@ -376,24 +376,18 @@ label.switch input:checked::after { transform: translateX(19px); }
 .tt-table .tt-slot { background: var(--card2); color: var(--dim); white-space: nowrap; font-size: 12px; width: 64px; }
 .tt-table td input { width: 100%; min-width: 64px; border: none; background: transparent; color: var(--text); text-align: center; font-size: 14px; padding: 4px 0; outline: none; }
 .tt-table td input:focus { background: var(--card2); border-radius: 6px; }
-/* 大屏课表（待机页常驻，分段胶囊式） */
-#standbyTt { --tt-label-w: 12vmin; width: fit-content; max-width: 94%; max-height: 74vh; overflow-y: auto; background: var(--glass); border: 1px solid var(--separator); border-radius: 3.4vmin; padding: 2.6vmin 3vmin; box-shadow: 0 2.5vmin 7vmin rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.07); backdrop-filter: blur(32px) saturate(1.7); -webkit-backdrop-filter: blur(32px) saturate(1.7); animation: fadeUp .5s cubic-bezier(.2,1,.4,1); }
+/* 大屏课表（待机页常驻，传统表格排版） */
+#standbyTt { width: fit-content; max-width: 94%; max-height: 74vh; overflow-y: auto; background: var(--glass); border: 1px solid var(--separator); border-radius: 3.4vmin; padding: 2.6vmin 3vmin; box-shadow: 0 2.5vmin 7vmin rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.07); backdrop-filter: blur(32px) saturate(1.7); -webkit-backdrop-filter: blur(32px) saturate(1.7); animation: fadeUp .5s cubic-bezier(.2,1,.4,1); }
 #standbyTt::-webkit-scrollbar { width: 4px; }
 #standbyTt::-webkit-scrollbar-thumb { background: rgba(127,127,127,.35); border-radius: 4px; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(1.6vmin); } to { opacity: 1; transform: translateY(0); } }
-/* 星期行与课程行共用同一套网格列定义（第一列固定标签列宽），保证严格对齐不错位 */
-.stt-days, .stt-row { display: grid; grid-template-columns: var(--tt-label-w) repeat(5, minmax(0, 1fr)); gap: 1vmin; }
-.stt-days { margin-bottom: 1.4vmin; }
-.stt-day-corner { font-size: 2.4vmin; visibility: hidden; }
-.stt-day { font-size: 2.6vmin; font-weight: 700; color: var(--dim); letter-spacing: .4vmin; padding: .7vmin 0; border-radius: 999px; text-align: center; transition: all .25s ease; }
-.stt-day.today { color: #fff; background: linear-gradient(135deg, var(--accent), #5e5ce6); box-shadow: 0 .6vmin 2.4vmin rgba(10,132,255,.5); }
-.stt-row { align-items: stretch; margin-bottom: .8vmin; }
-.stt-label { font-size: 2.4vmin; color: var(--dim); text-align: right; padding-right: 1.2vmin; white-space: nowrap; display: flex; align-items: center; justify-content: flex-end; }
-/* 课程名允许换行完整显示（不截断），格子内上下居中 */
-.stt-cell { font-size: 2.5vmin; color: var(--dim); text-align: center; padding: 1vmin .6vmin; border-radius: 1.4vmin; min-width: 0; white-space: normal; word-break: break-word; line-height: 1.35; display: flex; align-items: center; justify-content: center; min-height: 4.4vmin; transition: all .2s ease; }
-.stt-cell.filled { color: var(--text); background: rgba(127,127,127,.14); border: 1px solid rgba(127,127,127,.2); box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
-.stt-cell.today { background: rgba(10,132,255,.12); }
-.stt-cell.filled.today { color: #fff; background: linear-gradient(135deg, rgba(10,132,255,.85), rgba(94,92,230,.85)); border-color: transparent; box-shadow: 0 .6vmin 2.2vmin rgba(10,132,255,.4); }
+.screen-tt { border-collapse: collapse; margin: 0 auto; }
+.screen-tt th, .screen-tt td { border: 1px solid var(--separator); padding: 1.4vmin 2.2vmin; font-size: 3.2vmin; color: var(--text); text-align: center; word-break: break-word; }
+.screen-tt th { background: var(--card2); color: var(--dim); font-weight: 600; }
+.screen-tt .stt-slot { background: var(--card2); color: var(--dim); white-space: nowrap; font-size: 2.6vmin; }
+.screen-tt th.today { color: #fff; background: var(--accent); }
+.screen-tt td.today { background: rgba(10,132,255,.14); }
+.screen-tt .stt-empty { opacity: .35; }
 /* 二维码：缩小放右下角（玻璃瓦片） */
 .screen .qr-corner { position: absolute; right: 3vmin; bottom: 3vmin; text-align: center; z-index: 6; }
 .screen .qr-corner svg { width: 13vmin; height: 13vmin; background: #fff; padding: .8vmin; border-radius: 1.6vmin; box-shadow: 0 1vmin 3vmin rgba(0,0,0,.35); }
@@ -509,7 +503,7 @@ label.switch input:checked::after { transform: translateX(19px); }
   .screen .standby-row { flex-direction: column; align-items: center; gap: 3vmin; }
   .screen .notice-panel { flex: 0 0 auto; width: 100%; max-width: 100%; max-height: 28vh; }
   .screen .tt-panel { width: 100%; }
-  #standbyTt { max-height: 46vh; width: 100%; max-width: 100%; --tt-label-w: 9vmin; }
+  #standbyTt { max-height: 46vh; width: 100%; max-width: 100%; }
 }
 
 ::-webkit-scrollbar { width: 5px; }
