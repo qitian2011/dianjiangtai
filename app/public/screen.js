@@ -106,6 +106,7 @@ function voiceModeAllowsAI() { return S && (S.voiceMode === 'ai' || S.voiceMode 
 /* ---------- SSE（携带访问密码，?room=X 指定房间，同房间两端联动） ---------- */
 let es = null;
 const ROOM = new URLSearchParams(location.search).get('room') || '1';
+let roomNormalized = false;   // 打开时无 room 参数 → 自动跳到当前班级专属链接（只跳一次）
 async function initSSE() {
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
   // 服务器未设密码（PIN 为空）时直接放行；设了密码且未通过则弹一次，取消就不再反复弹
@@ -121,7 +122,14 @@ async function initSSE() {
     initSSE._gotState = true;
     const el = $('connError'); if (el && el.style.display !== 'none') el.style.display = 'none';
     const msg = JSON.parse(e.data);
-    if (msg.event === 'state') { S = msg.state; render(); }
+    if (msg.event === 'state') {
+      S = msg.state; render();
+      if (!roomNormalized && !/room=/.test(location.search)) {
+        roomNormalized = true;
+        const cur = (S.allClasses || []).find(c => c.i === S.currentClass);
+        if (cur && cur.rid) location.replace(location.pathname + '?room=' + encodeURIComponent(cur.rid));
+      }
+    }
     else if (msg.event === 'rollStart') startRoll(msg);
     else if (msg.event === 'rollResult') showResult(msg.names);
     else if (msg.event === 'answerStart') showAnswerStart();

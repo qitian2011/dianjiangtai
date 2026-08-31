@@ -24,6 +24,7 @@ function timeStr(ts) { const d = new Date(ts); return `${String(d.getHours()).pa
 
 /* ---------- SSE（携带访问密码，?room=X 指定房间） ---------- */
 let es = null;
+let roomNormalized = false;   // 打开时无 room 参数 → 自动跳到当前班级专属链接（只跳一次）
 async function initSSE() {
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
   // 服务器未设密码（PIN 为空）时直接放行；设了密码且未通过则弹一次，取消就不再反复弹
@@ -42,7 +43,18 @@ async function initSSE() {
   }, 8000);
   es.onopen = () => { $('connBadge').textContent = '● 已连接'; $('connBadge').style.background = '#1d4d33'; };
   es.onerror = () => { $('connBadge').textContent = '● 重连中…'; $('connBadge').style.background = '#6b4a1d'; };
-  es.onmessage = e => { initSSE._gotState = true; const m = JSON.parse(e.data); if (m.event === 'state') { S = m.state; render(); maybeShowPickModal(); } };
+  es.onmessage = e => {
+    initSSE._gotState = true;
+    const m = JSON.parse(e.data);
+    if (m.event === 'state') {
+      S = m.state; render(); maybeShowPickModal();
+      if (!roomNormalized && !/room=/.test(location.search)) {
+        roomNormalized = true;
+        const cur = (S.allClasses || []).find(c => c.i === S.currentClass);
+        if (cur && cur.rid) location.replace(location.pathname + '?room=' + encodeURIComponent(cur.rid));
+      }
+    }
+  };
 }
 initSSE();
 
