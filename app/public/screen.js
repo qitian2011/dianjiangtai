@@ -185,12 +185,11 @@ $('classOverlay').addEventListener('click', async e => {
   location.href = location.pathname + '?room=' + encodeURIComponent(target.rid);
 });
 
-/* ---------- 大屏一周课表 ---------- */
+/* ---------- 大屏一周课表（待机页常驻） ---------- */
 function renderTtTable() {
   const tt = (S && S.tt) || { am: 4, pm: 3, cells: {} };
   const days = ['周一', '周二', '周三', '周四', '周五'];
   const today = new Date().getDay();   // 0=周日
-  $('ttTitle').textContent = (S ? S.className : '') + ' · 一 周 课 表';
   let html = '<table class="screen-tt"><tr><th class="stt-slot"></th>' + days.map((d, i) => `<th class="${today === i + 1 ? 'today' : ''}">${d}</th>`).join('') + '</tr>';
   for (let s = 0; s < tt.am + tt.pm; s++) {
     const label = (s < tt.am ? '上午' : '下午') + (s < tt.am ? s + 1 : s - tt.am + 1) + '节';
@@ -202,15 +201,8 @@ function renderTtTable() {
     html += '</tr>';
   }
   html += '</table>';
-  $('ttTable').innerHTML = html;
+  $('standbyTt').innerHTML = html;
 }
-function toggleTt(show) {
-  $('ttOverlay').style.display = show ? '' : 'none';
-  if (show) renderTtTable();
-}
-$('ttBtn').onclick = () => toggleTt(true);
-$('ttClose').onclick = () => toggleTt(false);
-$('ttOverlay').addEventListener('click', e => { if (e.target === $('ttOverlay')) toggleTt(false); });
 
 /* ---------- 视图切换 ---------- */
 function view(name) {
@@ -299,23 +291,18 @@ function render() {
   // 答题结束后清理倒计时定时器（防止 tick 访问 null.answering 抛错）
   if (!S.answering && render._cdTimer) { clearInterval(render._cdTimer); render._cdTimer = null; }
   volume = S.volume; $('className').textContent = S.className;
-  if ($('ttOverlay') && $('ttOverlay').style.display !== 'none') renderTtTable();   // 课表打开时实时刷新
+  renderTtTable();   // 待机页课表常驻
   // 时钟
   const d = new Date();
   $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  // 大屏URL提示
-  // 教师端候选地址：服务端按网卡实时给出（网线/热点/USB共享自动适应）
-  const urls = (S.ctrlUrls && S.ctrlUrls.length ? S.ctrlUrls : [location.href.replace('screen.html', 'ctrl.html')]);
-  $('ctrlUrls').innerHTML = urls.map(u => `<div>${u}</div>`).join('');
-  // 二维码（每个候选地址一张，手机扫码直达控制端；最多 3 张防挤爆，其余地址只显示文字）
-  if (typeof qrcode === 'function' && S.ctrlUrls && S.ctrlUrls.length) {
-    $('qrRow').innerHTML = S.ctrlUrls.slice(0, 3).map((u, i) => {
-      try {
-        const qr = qrcode(0, 'M');
-        qr.addData(u); qr.make();
-        return `<div class="qr-cell">${qr.createSvgTag({ cellSize: 3, margin: 2, scalable: true })}<div>${i === 0 ? '← 手机扫码进控制端' : ''}</div></div>`;
-      } catch (e) { return ''; }
-    }).join('');
+  // 二维码（缩小放右下角，扫第一个候选地址进控制端，自动带房间参数）
+  if (typeof qrcode === 'function') {
+    const urls = (S.ctrlUrls && S.ctrlUrls.length ? S.ctrlUrls : [location.origin + '/ctrl.html' + (location.search || '')]);
+    try {
+      const qr = qrcode(0, 'M');
+      qr.addData(urls[0]); qr.make();
+      $('qrCorner').innerHTML = qr.createSvgTag({ cellSize: 2, margin: 1, scalable: true }) + '<div class="qr-corner-label">📱 扫码控制</div>';
+    } catch (e) {}
   }
   // 主视图：滚动动画进行中绝不切走（否则 skip 连抽等中间状态会把动画打回待机）
   if ($('rolling').style.display !== 'none') {

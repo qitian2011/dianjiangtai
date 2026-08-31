@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>课堂互动大屏 · 展示端</title>
-<link rel="stylesheet" href="style.css?v=11">
-<script src="theme.js?v=11"></script>
+<link rel="stylesheet" href="style.css?v=12">
+<script src="theme.js?v=12"></script>
 </head>
 <body class="screen">
   <!-- 传呼横条（缩小常驻） -->
@@ -21,18 +21,9 @@
   <div class="topbar">
     <div class="tb-left">
       <span class="cls" id="className" title="点击切换班级">—</span>
-      <span class="cls-hint tt-btn" id="ttBtn" style="cursor:pointer">📅 课表</span>
+      <span class="cls-hint">⇅ 切班</span>
     </div>
     <span id="clock"></span>
-  </div>
-
-  <!-- 一周课表弹层 -->
-  <div class="tt-overlay" id="ttOverlay" style="display:none">
-    <div class="tt-card">
-      <div class="cc-title" id="ttTitle">一 周 课 表</div>
-      <div id="ttTable"></div>
-      <div class="cc-close" id="ttClose">✕ 关闭</div>
-    </div>
   </div>
 
   <!-- 声音解锁提示（浏览器自动播放策略：必须有一次屏幕点击才允许出声） -->
@@ -60,15 +51,11 @@
   </div>
 
   <div class="center" id="center">
-    <!-- 待机 -->
+    <!-- 待机：课表常驻展示 -->
     <div id="standby">
       <div class="title">课 堂 互 动 大 屏</div>
-      <div class="standby-name">准 备 就 绪</div>
-      <div class="qr-row" id="qrRow"></div>
-      <div class="url-stack">
-        <div class="url-tip" id="urlTip">教师手机扫码，或浏览器打开以下地址</div>
-        <div class="url-list" id="ctrlUrls"></div>
-      </div>
+      <div id="standbyTt"></div>
+      <div class="qr-corner" id="qrCorner"></div>
     </div>
     <!-- 滚动：经典滚动 -->
     <div id="rolling" style="display:none">
@@ -111,7 +98,7 @@
 
   <div class="s-toast" id="screenToast"></div>
 
-<script src="vendor/qrcode.min.js?v=11"></script>
-<script src="screen.js?v=11"></script>
+<script src="vendor/qrcode.min.js?v=12"></script>
+<script src="screen.js?v=12"></script>
 </body>
 </html>
