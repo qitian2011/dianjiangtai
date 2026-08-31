@@ -168,7 +168,9 @@ button, input, select, textarea { font-family: inherit; }
   background: var(--glass); backdrop-filter: blur(24px) saturate(1.8); -webkit-backdrop-filter: blur(24px) saturate(1.8);
   border-radius: 20px; margin: 0 -4px;
   box-shadow: 0 8px 28px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.08); border: 1px solid var(--separator);
+  scrollbar-width: none; -ms-overflow-style: none;
 }
+.ctrl-header::-webkit-scrollbar { display: none; }
 .ctrl-header select, .ctrl-header input {
   background: var(--card2); color: var(--text); border: 1px solid var(--separator);
   border-radius: 12px; padding: 8px 10px; font-size: 15px; outline: none; transition: border-color .2s, box-shadow .2s;
