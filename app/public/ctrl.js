@@ -26,11 +26,11 @@ function timeStr(ts) { const d = new Date(ts); return `${String(d.getHours()).pa
 let es = null;
 async function initSSE() {
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
-  for (let i = 0; i < 3; i++) {
-    const r = await fetch(`/api/state?room=${ROOM}&pin=${encodeURIComponent(pin)}`).catch(() => null);
-    if (!r || r.status !== 401) break;
-    pin = prompt('请输入访问密码') || '';
-    localStorage.setItem('djPin', pin);
+  // 服务器未设密码（PIN 为空）时直接放行；设了密码且未通过则弹一次，取消就不再反复弹
+  const r0 = await fetch(`/api/state?room=${ROOM}&pin=${encodeURIComponent(pin)}`).catch(() => null);
+  if (r0 && r0.status === 401) {
+    const p = prompt('请输入访问密码');
+    if (p !== null) { pin = p; localStorage.setItem('djPin', p); }
   }
   es = new EventSource(`/events?room=${ROOM}&pin=${encodeURIComponent(pin)}`);
   // 8 秒内没收到状态 → 提示（网址错/被墙/密码错/断网）
