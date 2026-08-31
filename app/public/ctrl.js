@@ -94,11 +94,11 @@ function render() {
   // 传呼记录
   $('pageLogList').innerHTML = S.pageLog.length
     ? S.pageLog.slice().reverse().map(l => `<li><b>${l.names.join('、')}→${l.place}</b><span>${timeStr(l.sentAt)} ${l.confirmed ? '✅' : (l.retracted ? '撤回' : '…')}</span></li>`).join('') : '<li>暂无</li>';
-  // 名单（权重名字旁直接改：0=今天不点他，1=正常，2=双倍概率…；📌=加入今日请假）
+  // 名单（学号/组别旁直接改：权重 0=今天不点他，1=正常，2=双倍概率…；📌=加入今日请假）
   const absNow = S.absentToday || [];
   $('stuList').innerHTML = S.students.map(s => {
     const isAbs = absNow.includes(s.name);
-    return `<div class="stu-item"><span class="nm">${s.name}${isAbs ? ' <span style="color:#ff5d5d;font-size:12px">📌请假</span>' : ''}</span><span class="meta">${s.group || '未分组'} · 被点${s.pickedCount}次</span><span class="meta">权重</span><input type="text" inputmode="decimal" pattern="[0-9.]*" value="${s.weight}" data-w="${s.name}" title="0=不点他，1=正常，2=双倍概率"><span class="del" data-a="${s.name}" style="${isAbs ? 'color:#ff5d5d' : ''}">📌</span><span class="del" data-n="${s.name}">×</span></div>`;
+    return `<div class="stu-item"><span class="nm">${s.name}${isAbs ? ' <span style="color:#ff5d5d;font-size:12px">📌请假</span>' : ''}</span><span class="meta">学号</span><input type="text" inputmode="numeric" value="${s.sid || ''}" data-sid="${s.name}" title="学号" style="width:86px"><span class="meta">${s.group || '未分组'} · 被点${s.pickedCount}次</span><span class="meta">权重</span><input type="text" inputmode="decimal" pattern="[0-9.]*" value="${s.weight}" data-w="${s.name}" title="0=不点他，1=正常，2=双倍概率"><span class="del" data-a="${s.name}" style="${isAbs ? 'color:#ff5d5d' : ''}">📌</span><span class="del" data-n="${s.name}">×</span></div>`;
   }).join('') || '<div style="color:var(--dim)">名单为空，请导入</div>';
   // 组管理（自定义组，点 × 删组）
   $('groupManage').innerHTML = (S.groups || []).length
@@ -188,7 +188,12 @@ $('importBtn').onclick = async () => {
   const j = await cmd({ action: 'importRoster', className: $('importName').value.trim(), text });
   if (j.ok) { $('importText').value = ''; $('importName').value = ''; }
 };
-$('addStuBtn').onclick = () => { if ($('addName').value.trim()) { cmd({ action: 'addStudent', name: $('addName').value.trim(), group: $('addGroup').value.trim(), weight: parseFloat($('addWeight').value) || 1 }); $('addName').value = ''; } };
+$('addStuBtn').onclick = () => {
+  if ($('addName').value.trim()) {
+    cmd({ action: 'addStudent', name: $('addName').value.trim(), sid: $('addSid').value.trim(), group: $('addGroup').value.trim(), weight: parseFloat($('addWeight').value) || 1 });
+    $('addName').value = ''; $('addSid').value = '';
+  }
+};
 $('stuList').addEventListener('click', e => {
   if (e.target.classList.contains('del') && e.target.dataset.n) cmd({ action: 'delStudent', name: e.target.dataset.n });
   // 📌 一键加入/取消今日请假（病假等当天不点他，次日自动恢复）
@@ -199,6 +204,7 @@ $('stuList').addEventListener('click', e => {
   }
 });
 $('stuList').addEventListener('change', e => {
+  if (e.target.dataset.sid) { cmd({ action: 'setSid', name: e.target.dataset.sid, sid: e.target.value.trim() }); return; }
   if (!e.target.dataset.w) return;
   const w = parseFloat(e.target.value);
   if (isNaN(w)) { toast('请输入数字（0=不点他，1=正常）'); render(); return; }

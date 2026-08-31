@@ -126,14 +126,15 @@
       </div>
     </div>
     <div class="card">
-      <h3>粘贴导入新班级（一行一名；可选：姓名,组别,权重）</h3>
-      <textarea id="importText" placeholder="张三,第1组,1&#10;李四,第2组,2&#10;王五&#10;……"></textarea>
+      <h3>粘贴导入新班级（一行一名；格式：姓名,学号,组别,权重 或 姓名,学号,组别 / 姓名,组别,权重）</h3>
+      <textarea id="importText" placeholder="张三,2024001,第1组,1&#10;李四,2024002,第2组,2&#10;王五&#10;……"></textarea>
       <div class="row"><input type="text" id="importName" placeholder="班级名称（如：初一(3)班）" style="flex:1">
       <button class="btn primary" id="importBtn">导入</button></div>
     </div>
     <div class="card">
       <h3>添加单个学生</h3>
-      <div class="row"><input type="text" id="addName" placeholder="姓名" style="flex:1"></div>
+      <div class="row"><input type="text" id="addName" placeholder="姓名" style="flex:1">
+      <input type="text" id="addSid" placeholder="学号" style="width:110px"></div>
       <div class="row"><input type="text" id="addGroup" placeholder="组别（选填，可用下方已建组名）" style="flex:1" list="groupDatalist">
       <datalist id="groupDatalist"></datalist>
       <input type="text" id="addWeight" placeholder="权重" style="width:80px" value="1">

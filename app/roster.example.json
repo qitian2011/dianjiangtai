@@ -4,18 +4,18 @@
       "name": "示例一班",
       "groups": ["第一组", "第二组"],
       "students": [
-        { "name": "小明", "group": "第一组", "weight": 1, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 },
-        { "name": "小红", "group": "第一组", "weight": 1, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 },
-        { "name": "小刚", "group": "第二组", "weight": 1, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 },
-        { "name": "小丽", "group": "第二组", "weight": 1, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 }
+        { "name": "小明", "sid": "2025001", "group": "第一组", "weight": 1, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 },
+        { "name": "小红", "sid": "2025002", "group": "第一组", "weight": 1, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 },
+        { "name": "小刚", "sid": "2025003", "group": "第二组", "weight": 1, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 },
+        { "name": "小丽", "sid": "2025004", "group": "第二组", "weight": 1, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 }
       ]
     },
     {
       "name": "示例二班",
       "groups": [],
       "students": [
-        { "name": "小华", "group": "", "weight": 1, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 },
-        { "name": "小军", "group": "", "weight": 0.5, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 }
+        { "name": "小华", "sid": "", "group": "", "weight": 1, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 },
+        { "name": "小军", "sid": "", "group": "", "weight": 0.5, "pickedCount": 0, "right": 0, "wrong": 0, "none": 0, "skipped": 0 }
       ]
     }
   ],

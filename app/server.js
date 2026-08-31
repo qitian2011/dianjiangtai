@@ -20,10 +20,10 @@ function defaultRoster() {
       name: '示例班',
       groups: ['A组', 'B组'],
       students: [
-        { name: '张三', group: 'A组', weight: 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 },
-        { name: '李四', group: 'B组', weight: 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 },
-        { name: '王五', group: 'A组', weight: 2, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 },
-        { name: '赵六', group: 'B组', weight: 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 }
+        { name: '张三', sid: '2024001', group: 'A组', weight: 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 },
+        { name: '李四', sid: '2024002', group: 'B组', weight: 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 },
+        { name: '王五', sid: '2024003', group: 'A组', weight: 2, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 },
+        { name: '赵六', sid: '2024004', group: 'B组', weight: 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 }
       ],
       absent: { date: '', names: [] }   // 当日请假名单（跨天自动失效）
     }],
@@ -34,6 +34,8 @@ function defaultRoster() {
 function loadJSON(f) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return null; } }
 let roster = loadJSON(ROSTER_FILE) || defaultRoster();
 roster.classes.forEach(c => { if (!c.absent || typeof c.absent !== 'object') c.absent = { date: '', names: [] }; });
+// 老名单迁移：补学号字段
+roster.classes.forEach(c => (c.students || []).forEach(s => { if (s.sid === undefined) s.sid = ''; }));
 function saveRoster() { fs.writeFileSync(ROSTER_FILE, JSON.stringify(roster, null, 2), 'utf8'); }
 function todayStr() {
   const d = new Date();
@@ -80,7 +82,7 @@ function snapshot() {
     ctrlUrls: lanIPs().map(ip => `http://${ip}:${PORT}/ctrl.html`),
     className: cls.name,
     groups: cls.groups || [],
-    students: cls.students.map(s => ({ name: s.name, group: s.group, weight: s.weight, pickedCount: s.pickedCount })),
+    students: cls.students.map(s => ({ name: s.name, sid: s.sid || '', group: s.group, weight: s.weight, pickedCount: s.pickedCount })),
     allClasses: roster.classes.map((c, i) => ({ i, name: c.name, locked: !!c.pass })),
     currentClass: roster.currentClass,
     places: roster.places,
@@ -284,10 +286,20 @@ function handleCmd(body, res) {
       break;
     }
     case 'importRoster': {
+      // 支持格式：姓名 / 姓名,学号 / 姓名,组别,权重(旧) / 姓名,学号,组别 / 姓名,学号,组别,权重
       const lines = String(body.text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
       const students = lines.map(l => {
         const p = l.split(/[,，\t]/).map(x => x.trim());
-        return { name: p[0], group: p[1] || '', weight: parseFloat(p[2]) || 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 };
+        let name = p[0], sid = '', group = '', weight = 1;
+        if (p.length >= 4) { sid = p[1]; group = p[2]; weight = parseFloat(p[3]) || 1; }
+        else if (p.length === 3) {
+          if (isNaN(parseFloat(p[2]))) { sid = p[1]; group = p[2]; }   // 姓名,学号,组别
+          else { group = p[1]; weight = parseFloat(p[2]) || 1; }        // 姓名,组别,权重（旧）
+        }
+        else if (p.length === 2) {
+          if (/^\d+$/.test(p[1])) sid = p[1]; else group = p[1];        // 姓名,学号 或 姓名,组别
+        }
+        return { name, sid: sid.slice(0, 20), group: group.slice(0, 12), weight, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 };
       }).filter(s => s.name);
       if (students.length === 0) { ok = false; msg = '没有解析到有效名单'; break; }
       const name = String(body.className || '').trim() || `导入班${roster.classes.length + 1}`;
@@ -303,8 +315,15 @@ function handleCmd(body, res) {
       if (!cls) { ok = false; msg = '无班级'; break; }
       const name = String(body.name || '').trim().slice(0, 20);
       if (!name || find(name)) { ok = false; msg = '姓名为空或重复'; break; }
-      cls.students.push({ name, group: String(body.group || '').trim(), weight: parseFloat(body.weight) || 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 });
+      cls.students.push({ name, sid: String(body.sid || '').trim().slice(0, 20), group: String(body.group || '').trim(), weight: parseFloat(body.weight) || 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 });
       if (body.group && !cls.groups.includes(body.group)) cls.groups.push(body.group);
+      saveRoster();
+      break;
+    }
+    case 'setSid': {
+      const s = find(String(body.name || ''));
+      if (!s) { ok = false; msg = '学生不存在'; break; }
+      s.sid = String(body.sid || '').trim().slice(0, 20);
       saveRoster();
       break;
     }
