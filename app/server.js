@@ -60,6 +60,11 @@ function genRid(name, i) {
   return 'c' + (h >>> 0).toString(36);
 }
 const rooms = new Map();
+// 房间绑定班级：room 是某班级 rid 时，班级永远由 rid 决定（不受房间内切班状态影响，杜绝"串班"）
+function roomClassIndex(roomId, room) {
+  const idx = roster.classes.findIndex(c => c.rid === roomId);
+  return idx >= 0 ? idx : room.currentClass;
+}
 function getRoom(id) {
   id = String(id || '1').slice(0, 24);
   if (!rooms.has(id)) {
@@ -99,7 +104,7 @@ function lanIPs() {
 function pushState(roomId) { broadcast(roomId, { event: 'state', state: snapshot(roomId) }); }
 function snapshot(roomId) {
   const room = getRoom(roomId);
-  const cls = roster.classes[room.currentClass] || { name: '', students: [] };
+  const cls = roster.classes[roomClassIndex(roomId, room)] || { name: '', students: [] };
   const qs = roomId !== '1' ? '?room=' + encodeURIComponent(roomId) : '';
   return {
     ctrlUrls: lanIPs().map(ip => `http://${ip}:${PORT}/ctrl.html${qs}`),
@@ -107,7 +112,7 @@ function snapshot(roomId) {
     groups: cls.groups || [],
     students: cls.students.map(s => ({ name: s.name, sid: s.sid || '', group: s.group, weight: s.weight, pickedCount: s.pickedCount })),
     allClasses: roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass })),
-    currentClass: room.currentClass,
+    currentClass: roomClassIndex(roomId, room),
     places: roster.places,
     pickedThisRound: room.pickedThisRound,
     lastPick: room.lastPick,
@@ -125,8 +130,9 @@ function snapshot(roomId) {
 }
 
 /* ---------------- 加权抽取（按房间） ---------------- */
-function pickStudents(room, { group = null, count = 1, noRepeat = true } = {}) {
-  const cls = roster.classes[room.currentClass];
+function pickStudents(roomId, { group = null, count = 1, noRepeat = true } = {}) {
+  const room = getRoom(roomId);
+  const cls = roster.classes[roomClassIndex(roomId, room)];
   if (!cls) return [];
   const absent = absentNames(cls);
   let pool = cls.students.filter(s => !group || s.group === group);
@@ -161,7 +167,7 @@ function pickStudents(room, { group = null, count = 1, noRepeat = true } = {}) {
 /* ---------------- 指令处理 ---------------- */
 function handleCmd(body, res, roomId) {
   const session = getRoom(roomId);
-  const cls = roster.classes[session.currentClass];
+  const cls = roster.classes[roomClassIndex(roomId, session)];
   const find = (name) => cls && cls.students.find(s => s.name === name);
   const disp = (s) => s.group ? `${s.name}(${s.group})` : s.name; // 显示名：带组名
   const now = Date.now();
@@ -169,7 +175,7 @@ function handleCmd(body, res, roomId) {
   switch (body.action) {
     case 'roll': {
       if (session.answering) { ok = false; msg = '答题进行中'; break; }
-      const picked = pickStudents(session, body);
+      const picked = pickStudents(roomId, body);
       if (picked.length === 0) {
         ok = false;
         const allZero = cls.students.length > 0 && cls.students.every(s => (s.weight || 0) <= 0);
@@ -221,7 +227,7 @@ function handleCmd(body, res, roomId) {
       session.answering = null; session.lastPick = null;
       saveRoster(); broadcast(roomId, { event: 'skipped' });
       // 自动连抽下一名
-      const picked = pickStudents(session, { noRepeat: true });
+      const picked = pickStudents(roomId, { noRepeat: true });
       if (picked.length) {
         const names = picked.map(s => s.name);
         const display = picked.map(disp);

@@ -58,6 +58,11 @@ export class Room {
     for (const ch of (name + '#' + i)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); }
     return 'c' + (h >>> 0).toString(36);
   }
+  // 房间绑定班级：room 是某班级 rid 时，班级永远由 rid 决定（不受房间内切班状态影响）
+  roomClassIndex(roomId, room) {
+    const idx = this.roster.classes.findIndex(c => c.rid === roomId);
+    return idx >= 0 ? idx : room.currentClass;
+  }
   getRoom(id) {
     id = String(id || '1').slice(0, 24);
     if (!this.rooms.has(id)) {
@@ -78,7 +83,7 @@ export class Room {
   }
   snapshot(roomId) {
     const room = this.getRoom(roomId);
-    const cls = this.roster.classes[room.currentClass] || { name: '', students: [] };
+    const cls = this.roster.classes[this.roomClassIndex(roomId, room)] || { name: '', students: [] };
     const qs = roomId !== '1' ? '?room=' + encodeURIComponent(roomId) : '';
     return {
       ctrlUrls: [`${this.origin}/ctrl.html${qs}`],
@@ -86,7 +91,7 @@ export class Room {
       groups: cls.groups || [],
       students: cls.students.map(x => ({ name: x.name, sid: x.sid || '', group: x.group, weight: x.weight, pickedCount: x.pickedCount })),
       allClasses: this.roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass })),
-      currentClass: room.currentClass,
+      currentClass: this.roomClassIndex(roomId, room),
       places: this.roster.places,
       pickedThisRound: room.pickedThisRound,
       lastPick: room.lastPick,
@@ -139,8 +144,9 @@ export class Room {
   }
 
   /* ---------------- 加权抽取 ---------------- */
-  pickStudents(room, { group = null, count = 1, noRepeat = true } = {}) {
-    const cls = this.roster.classes[room.currentClass];
+  pickStudents(roomId, { group = null, count = 1, noRepeat = true } = {}) {
+    const room = this.getRoom(roomId);
+    const cls = this.roster.classes[this.roomClassIndex(roomId, room)];
     if (!cls) return [];
     const absent = this.absentNames(cls);
     let pool = cls.students.filter(x => !group || x.group === group);
@@ -176,7 +182,7 @@ export class Room {
   async handleCmd(body, roomId) {
     await this.ready;
     const roster = this.roster, session = this.getRoom(roomId);
-    const cls = roster.classes[session.currentClass];
+    const cls = roster.classes[this.roomClassIndex(roomId, session)];
     const find = (name) => cls && cls.students.find(x => x.name === name);
     const disp = (x) => x.group ? `${x.name}(${x.group})` : x.name;
     const now = Date.now();
@@ -184,7 +190,7 @@ export class Room {
     switch (body.action) {
       case 'roll': {
         if (session.answering) { ok = false; msg = '答题进行中'; break; }
-        const picked = this.pickStudents(session, body);
+        const picked = this.pickStudents(roomId, body);
         if (picked.length === 0) {
           ok = false;
           const allZero = cls.students.length > 0 && cls.students.every(x => (x.weight || 0) <= 0);
@@ -233,7 +239,7 @@ export class Room {
         for (const n of session.lastPick.names) { const x = find(n); if (x) x.skipped = (x.skipped || 0) + 1; }
         session.answering = null; session.lastPick = null;
         this.saveRoster(); this.broadcast(roomId, { event: 'skipped' });
-        const picked = this.pickStudents(session, { noRepeat: true });
+        const picked = this.pickStudents(roomId, { noRepeat: true });
         if (picked.length) {
           const names = picked.map(x => x.name);
           const display = picked.map(disp);
