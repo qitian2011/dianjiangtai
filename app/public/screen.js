@@ -225,14 +225,11 @@ function showResult(msg) {
   $('resultGroups').textContent = groups.length ? groups.join('  ·  ') : '';
   $('resultHint').textContent = names.length > 1 ? '请几位同学一起讨论' : '请回答问题';
   sfx.reveal();
-  // AI 播报：请 XXX 同学回答问题
-  if (voiceModeAllowsAI() && msg.names && msg.names.length) {
-    speak(`${msg.names.join('、')} 同学，请回答问题`);
-  }
+  // 按需求：点名结果「请回答问题」不做 AI 语音播报（提示音保留）
 }
 function showAnswerStart() {
   render();
-  if (voiceModeAllowsAI() && S && S.lastPick && S.lastPick.names) speak(`${S.lastPick.names.join('、')} 同学，请开始回答问题，计时开始`);
+  // 「请开始回答问题」同样不做 AI 语音播报
 }
 function showMark(result) {
   const tag = $('resultHint');
