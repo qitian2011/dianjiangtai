@@ -212,14 +212,15 @@ $('resetStatsBtn').onclick = () => cmd({ action: 'resetStats' });
 $('classSel').onchange = async e => {
   const i = +e.target.value;
   if (i === S.currentClass) return;
-  const target = (S.allClasses || []).find(c => c.i === i);
-  let pass = '';
-  if (target && target.locked) {
-    pass = prompt(`班级「${target.name}」已加密，请输入密码：`, '') || '';
+  // 先无密码尝试（服务端会话已解锁过则直接通过，避免重复询问）
+  let j = await cmd({ action: 'classSwitch', index: i });
+  if (j && !j.ok && j.msg === '需要班级密码') {
+    const target = (S.allClasses || []).find(c => c.i === i);
+    const pass = prompt(`班级「${target ? target.name : ''}」已加密，请输入密码：`, '') || '';
     if (!pass) { render(); return; }
+    j = await cmd({ action: 'classSwitch', index: i, pass });
   }
-  const j = await cmd({ action: 'classSwitch', index: i, pass });
-  if (!j.ok) render(); // 密码错误：恢复下拉框
+  if (!j.ok) render(); // 失败：恢复下拉框
 };
 $('addClassBtn').onclick = () => {
   const name = prompt('新建班级名称（留空自动命名）：', '');

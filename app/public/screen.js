@@ -144,13 +144,14 @@ $('classOverlay').addEventListener('click', async e => {
   if (!btn) return;
   const i = +btn.dataset.i;
   if (i === S.currentClass) { toggleClassPicker(false); return; }
-  const target = (S.allClasses || []).find(c => c.i === i);
-  let pass = '';
-  if (target && target.locked) {
-    pass = prompt(`班级「${target.name}」已加密，请输入密码：`, '') || '';
-    if (!pass) return;
+  // 先无密码尝试（服务端会话已解锁过则直接通过，避免重复询问）
+  let j = await apiCmd({ action: 'classSwitch', index: i });
+  if (j && !j.ok && j.msg === '需要班级密码') {
+    const target = (S.allClasses || []).find(c => c.i === i);
+    const pass = prompt(`班级「${target ? target.name : ''}」已加密，请输入密码：`, '') || '';
+    if (!pass) { toggleClassPicker(false); return; }
+    j = await apiCmd({ action: 'classSwitch', index: i, pass });
   }
-  const j = await apiCmd({ action: 'classSwitch', index: i, pass });
   toggleClassPicker(false);
   if (j && j.msg) showMsg(j.msg);
 });
@@ -187,10 +188,9 @@ function showResult(msg) {
   view('result');
   const names = msg.display || msg.names || [];
   $('resultNames').textContent = names.join('  ');
-  // 重触发弹入动画
-  $('resultNames').classList.remove('pop-in');
-  void $('resultNames').offsetWidth;
+  // 重触发弹入动画（结束后移除，让金色光晕动画恢复）
   $('resultNames').classList.add('pop-in');
+  setTimeout(() => $('resultNames').classList.remove('pop-in'), 600);
   // 组名小字（有组才显示）
   const groups = (msg.students || []).map(s => s.group).filter(Boolean);
   $('resultGroups').textContent = groups.length ? groups.join('  ·  ') : '';
@@ -243,6 +243,8 @@ let lastPageKey = '';
 let lastPageSoundAt = 0;
 function render() {
   if (!S) return;
+  // 答题结束后清理倒计时定时器（防止 tick 访问 null.answering 抛错）
+  if (!S.answering && render._cdTimer) { clearInterval(render._cdTimer); render._cdTimer = null; }
   volume = S.volume; $('className').textContent = S.className;
   // 时钟
   const d = new Date();
@@ -261,8 +263,10 @@ function render() {
       } catch (e) { return ''; }
     }).join('');
   }
-  // 主视图
-  if (S.answering) {
+  // 主视图：滚动动画进行中绝不切走（否则 skip 连抽等中间状态会把动画打回待机）
+  if ($('rolling').style.display !== 'none') {
+    /* 动画中保持滚动视图 */
+  } else if (S.answering) {
     view('answering');
     $('ansName').textContent = S.answering.name;
     const cd = $('countdown');
@@ -291,7 +295,8 @@ function render() {
   if (p && !p.retracted && !p.confirmed) {
     lastPageKey = key;
     showPage(p);
-  } else if (key !== lastPageKey) {
+  } else {
+    // 已确认 / 已撤回 / 无传呼：一律收起弹窗
     lastPageKey = key;
     hidePage();
   }

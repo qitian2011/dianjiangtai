@@ -158,7 +158,7 @@ export class Room {
     const find = (name) => cls && cls.students.find(x => x.name === name);
     const disp = (x) => x.group ? `${x.name}(${x.group})` : x.name;
     const now = Date.now();
-    let ok = true, msg = '', rolling = false;
+    let ok = true, msg = '';
     switch (body.action) {
       case 'roll': {
         if (session.answering) { ok = false; msg = '答题进行中'; break; }
@@ -177,14 +177,14 @@ export class Room {
         session.lessonLog.push({ names, display, at: now });
         this.broadcast({ event: 'rollStart', duration: session.animationMs, pool });
         const dur = Math.max(500, session.animationMs);
-        rolling = true;
         setTimeout(() => {
           session.lastPick = { names, display, at: Date.now() };
           session.answering = null;
           this.saveRoster(); this.pushState();
           this.broadcast({ event: 'rollResult', names, display, students });
         }, dur);
-        break;
+        // 与本地版一致：动画期间不推中间 state（否则大屏滚动视图会被打断），结果出来后再推
+        return json({ ok: true, msg: '', rolling: true });
       }
       case 'answerStart': {
         if (!session.lastPick) { ok = false; msg = '请先点名'; break; }
@@ -384,7 +384,7 @@ export class Room {
       default: ok = false; msg = '未知指令';
     }
     this.pushState();
-    return json({ ok, msg, ...(rolling ? { rolling: true } : {}) });
+    return json({ ok, msg });
   }
 
   async fetch(req) {

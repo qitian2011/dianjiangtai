@@ -363,7 +363,8 @@ label.switch input:checked::after { transform: translateX(19px); }
   0%,100% { transform: scale(1); opacity: .82; text-shadow: 0 0 2vmin rgba(10,132,255,0); }
   50%     { transform: scale(1.045); opacity: 1; text-shadow: 0 0 5vmin rgba(10,132,255,.5), 0 0 14vmin rgba(10,132,255,.2); }
 }
-.pop-in { animation: pop .5s cubic-bezier(.2,1.6,.4,1); }
+/* 结果名弹入动画（双类提高优先级，确保每次点名都能重触发） */
+.result-names.pop-in { animation: pop .5s cubic-bezier(.2,1.6,.4,1); }
 
 .result-names { font-size: 15vmin; font-weight: 800; color: var(--yellow); letter-spacing: 2vmin; animation: pop .5s cubic-bezier(.2,1.6,.4,1), result-glow 2.6s ease-in-out .5s infinite; }
 @keyframes result-glow {
