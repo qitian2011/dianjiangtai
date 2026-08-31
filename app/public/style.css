@@ -326,6 +326,14 @@ label.switch input:checked::after { transform: translateX(19px); }
 .screen .topbar .cls:hover { background: var(--accent); border-color: transparent; color: #fff; }
 .screen .topbar .cls:active { transform: scale(.97); }
 .screen .topbar .cls-hint { font-size: 14px; color: var(--dim); opacity: .7; }
+.screen .room-badge { font-size: 14px; font-weight: 600; color: var(--accent); background: var(--card2); border: 1px solid var(--separator); border-radius: 12px; padding: 2px 12px; letter-spacing: .5px; }
+/* 声音解锁提示浮层（首次点屏后消失） */
+.unlock-overlay { position: absolute; inset: 0; z-index: 200; background: rgba(5, 8, 16, .78); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); display: flex; align-items: center; justify-content: center; cursor: pointer; animation: fadeIn .3s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.unlock-card { text-align: center; padding: 6vmin 10vmin; border-radius: 4vmin; background: var(--page-card-bg); border: 1px solid var(--separator); box-shadow: 0 0 120px rgba(10,132,255,.25); backdrop-filter: blur(40px) saturate(1.6); -webkit-backdrop-filter: blur(40px) saturate(1.6); }
+.unlock-card .unlock-bell { font-size: 12vmin; animation: bell-swing 1.4s ease-in-out infinite; transform-origin: 50% 12%; }
+.unlock-card .unlock-text { font-size: 5.5vmin; font-weight: 800; color: var(--text); margin-top: 2vmin; letter-spacing: 1vmin; }
+.unlock-card .unlock-sub { font-size: 2.8vmin; color: var(--dim); margin-top: 1.5vmin; }
 /* 大屏班级选择弹层 */
 .class-overlay { position: absolute; inset: 0; z-index: 30; background: rgba(0,0,0,.55); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); display: flex; align-items: center; justify-content: center; }
 .class-card { background: var(--page-card-bg); border: 1px solid var(--separator); border-radius: 3vmin; padding: 5vmin 6vmin; text-align: center; min-width: 64vmin; max-width: 88vw; max-height: 80vh; overflow-y: auto; animation: pop .35s cubic-bezier(.2,1.6,.4,1); backdrop-filter: blur(40px) saturate(1.6); -webkit-backdrop-filter: blur(40px) saturate(1.6); box-shadow: 0 0 100px rgba(10,132,255,.18), 0 4vmin 10vmin rgba(0,0,0,.45); }

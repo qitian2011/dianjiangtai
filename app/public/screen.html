@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>课堂互动大屏 · 展示端</title>
-<link rel="stylesheet" href="style.css?v=4">
-<script src="theme.js?v=4"></script>
+<link rel="stylesheet" href="style.css?v=5">
+<script src="theme.js?v=5"></script>
 </head>
 <body class="screen">
   <!-- 传呼横条（缩小常驻） -->
@@ -22,8 +22,18 @@
     <div class="tb-left">
       <span class="cls" id="className" title="点击切换班级">—</span>
       <span class="cls-hint">⇅ 切班</span>
+      <span class="room-badge" id="roomBadge" title="当前房间（同房间设备联动）"></span>
     </div>
     <span id="clock"></span>
+  </div>
+
+  <!-- 声音解锁提示（浏览器自动播放策略：必须有一次屏幕点击才允许出声） -->
+  <div class="unlock-overlay" id="unlockOverlay">
+    <div class="unlock-card">
+      <div class="unlock-bell">🔊</div>
+      <div class="unlock-text">点击屏幕任意位置开启声音</div>
+      <div class="unlock-sub">点名提示音 / 传呼铃声 / AI 播报 都需要这一步</div>
+    </div>
   </div>
 
   <div class="center" id="center">
@@ -78,7 +88,7 @@
 
   <div class="s-toast" id="screenToast"></div>
 
-<script src="vendor/qrcode.min.js?v=4"></script>
-<script src="screen.js?v=4"></script>
+<script src="vendor/qrcode.min.js?v=5"></script>
+<script src="screen.js?v=5"></script>
 </body>
 </html>

@@ -9,11 +9,27 @@ const $ = id => document.getElementById(id);
 function ensureAudio() {
   try {
     soundCtx = soundCtx || new (window.AudioContext || window.webkitAudioContext)();
-    if (soundCtx.state === 'suspended') soundCtx.resume(); // 解除浏览器自动播放限制
+    if (soundCtx.state === 'suspended') {
+      const p = soundCtx.resume();            // 无用户手势时会被浏览器拒绝，静默处理
+      if (p && p.catch) p.catch(() => {});
+    }
+    if (soundCtx.state === 'running') {       // 已解锁：收起提示浮层
+      const ov = document.getElementById('unlockOverlay');
+      if (ov) ov.style.display = 'none';
+    }
   } catch (e) {}
 }
 // 首次任意触摸/按键即解锁声音（自动播放策略要求用户手势）
 ['pointerdown', 'touchstart', 'keydown'].forEach(ev => document.addEventListener(ev, ensureAudio));
+// 开机声音解锁浮层：点一下就解锁（浏览器必须收到真实手势）
+(function initUnlock() {
+  const ov = document.getElementById('unlockOverlay');
+  if (!ov) return;
+  const unlock = () => { ensureAudio(); if (ov) ov.style.display = 'none'; };
+  ov.addEventListener('pointerdown', unlock);
+  ov.addEventListener('touchstart', unlock, { passive: true });
+  setTimeout(() => { if (soundCtx && soundCtx.state === 'running') ov.style.display = 'none'; }, 800);
+})();
 function beep(freq, dur, when = 0, vol = 1, type = 'sine') {
   try {
     ensureAudio();
@@ -90,6 +106,7 @@ function voiceModeAllowsAI() { return S && (S.voiceMode === 'ai' || S.voiceMode 
 /* ---------- SSE（携带访问密码，?room=X 指定房间，同房间两端联动） ---------- */
 let es = null;
 const ROOM = new URLSearchParams(location.search).get('room') || '1';
+(function initRoomBadge() { const b = document.getElementById('roomBadge'); if (b) b.textContent = '房 ' + ROOM; })();
 async function initSSE() {
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
   for (let i = 0; i < 3; i++) {
@@ -247,6 +264,7 @@ function render() {
   // 答题结束后清理倒计时定时器（防止 tick 访问 null.answering 抛错）
   if (!S.answering && render._cdTimer) { clearInterval(render._cdTimer); render._cdTimer = null; }
   volume = S.volume; $('className').textContent = S.className;
+  if ($('roomBadge')) $('roomBadge').textContent = '房 ' + ROOM;
   // 时钟
   const d = new Date();
   $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
