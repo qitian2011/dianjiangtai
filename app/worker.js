@@ -342,16 +342,18 @@ export class Room {
       }
       case 'resetRound': session.pickedThisRound = []; session.lastPick = null; session.answering = null; break;
       case 'page': {
-        const names = (body.names || []).filter(n => find(n));
+        // 姓名+学号成对校验：学号用于区分同名，无学号的学生 sids 为空串（兼容旧控制端）
+        const pairs = (body.names || []).map((n, i) => ({ n, s: (body.sids || [])[i] || '' })).filter(p => find(p.n));
+        const names = pairs.map(p => p.n), sids = pairs.map(p => p.s);
         if (names.length === 0) { ok = false; msg = '学生不在名单内'; break; }
         session.page = {
-          names, place: String(body.place || '办公室').slice(0, 20),
+          names, sids, place: String(body.place || '办公室').slice(0, 20),
           from: String(body.from || '').slice(0, 20),
           note: String(body.note || '').slice(0, 30),
           duration: (Number.isFinite(+body.duration) && +body.duration >= 0 && +body.duration <= 3600) ? (+body.duration | 0) : 30,
           sentAt: now, confirmed: false, retracted: false
         };
-        session.pageLog.push({ names, place: session.page.place, from: session.page.from, sentAt: now, confirmed: false, retracted: false });
+        session.pageLog.push({ names, sids, place: session.page.place, from: session.page.from, sentAt: now, confirmed: false, retracted: false });
         this.broadcast(roomId, { event: 'page', page: session.page });
         break;
       }
