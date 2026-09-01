@@ -324,8 +324,10 @@ function showMark(result) {
 /* ---------- 传呼 ---------- */
 function showPage(page) {
   if (!page || page.retracted || page.confirmed) { hidePage(); return; }
-  const names = page.names.join('、');
-  $('pName').textContent = names;
+  // 显示：姓名·学号（有学号时），便于确认身份；AI 播报仍喊姓名
+  const showNames = page.names.map((n, i) => page.sids && page.sids[i] ? `${n}·${page.sids[i]}` : n).join('、');
+  const sayNames = page.names.join('、');
+  $('pName').textContent = showNames;
   $('pPlace').textContent = `请到「${page.place}」` + (page.from ? ` 找 ${page.from}` : '');
   $('pNote').textContent = page.note || '';
   $('pFrom').textContent = '请看到通知后及时前往';
@@ -337,7 +339,7 @@ function showPage(page) {
   sfx.page();
   // AI 播报：XX 同学，请到「教务处」找李老师，带上作业本（含留言）
   if (voiceModeAllowsAI()) {
-    speak(`${names} 同学，请到「${page.place}」` + (page.from ? `，找 ${page.from}` : '') + (page.note ? `，${page.note}` : ''));
+    speak(`${sayNames} 同学，请到「${page.place}」` + (page.from ? `，找 ${page.from}` : '') + (page.note ? `，${page.note}` : ''));
   }
 }
 function hidePage() {
