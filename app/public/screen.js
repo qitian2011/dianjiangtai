@@ -186,21 +186,68 @@ $('classOverlay').addEventListener('click', async e => {
 });
 
 /* ---------- 大屏一周课表（待机页常驻，老式表格排版） ---------- */
+// 根据课表时间判断当前是哪一节（返回 {key,label,time}，非课时段返回 null）
+function nowSlotInfo(tt) {
+  if (!tt || !tt.times) return null;
+  const now = new Date();
+  const dow = now.getDay();            // 1-5 周一~周五
+  if (dow < 1 || dow > 5) return null;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const sls = [];
+  if (tt.pre) sls.push({ key: 'pre', label: '早读' });
+  for (let s = 0; s < tt.am; s++) sls.push({ key: String(s), label: '上午' + (s + 1) + '节' });
+  for (let s = 0; s < tt.pm; s++) sls.push({ key: String(tt.am + s), label: '下午' + (s + 1) + '节' });
+  if (tt.post) sls.push({ key: 'post', label: '晚托' });
+  for (const sl of sls) {
+    const t = tt.times[sl.key];
+    if (!t || !t.s) continue;
+    const sp = String(t.s).split(':');
+    const sh = parseInt(sp[0], 10), sm = parseInt(sp[1], 10);
+    if (isNaN(sh)) continue;
+    const sMin = sh * 60 + (isNaN(sm) ? 0 : sm);
+    let eMin = Infinity;
+    if (t.e) {
+      const ep = String(t.e).split(':');
+      const eh = parseInt(ep[0], 10), em = parseInt(ep[1], 10);
+      if (!isNaN(eh)) eMin = eh * 60 + (isNaN(em) ? 0 : em);
+    }
+    if (nowMin >= sMin && nowMin < eMin) return { key: sl.key, label: sl.label, time: t.s + (t.e ? '—' + t.e : '') };
+  }
+  return null;
+}
 function renderTtTable() {
   const tt = (S && S.tt) || { am: 4, pm: 3, cells: {} };
   const days = ['周一', '周二', '周三', '周四', '周五'];
   const today = new Date().getDay();   // 0=周日
+  const now = nowSlotInfo(tt);
+  // 今日答题统计：stats 键为「slotKey_yyyy-MM-dd」
+  const td = new Date();
+  const todayStr2 = td.getFullYear() + '-' + String(td.getMonth() + 1).padStart(2, '0') + '-' + String(td.getDate()).padStart(2, '0');
+  const statsMap = {};
+  const stAll = tt.stats || {};
+  for (const k in stAll) {
+    if (k.endsWith('_' + todayStr2)) statsMap[k.slice(0, k.length - todayStr2.length - 1)] = stAll[k];
+  }
   // 节次列表：早读 → 上午 → 下午 → 晚托
   const slots = [];
   if (tt.pre) slots.push({ key: 'pre', label: '早读', extra: true });
-  for (let s = 0; s < tt.am; s++) slots.push({ key: s, label: '上午' + (s + 1) + '节' });
-  for (let s = 0; s < tt.pm; s++) slots.push({ key: tt.am + s, label: '下午' + (s + 1) + '节' });
+  for (let s = 0; s < tt.am; s++) slots.push({ key: String(s), label: '上午' + (s + 1) + '节' });
+  for (let s = 0; s < tt.pm; s++) slots.push({ key: String(tt.am + s), label: '下午' + (s + 1) + '节' });
   if (tt.post) slots.push({ key: 'post', label: '晚托', extra: true });
-  let html = '<table class="screen-tt"><tr><th class="stt-slot"></th>' + days.map((d, i) => `<th class="${today === i + 1 ? 'today' : ''}">${d}</th>`).join('') + '</tr>';
+  let html = '';
+  // 现在是横幅：上课时段显示当前节次/课程/时间/今日答题
+  if (now) {
+    const st = statsMap[now.key];
+    const course = (tt.cells || {})[today + '_' + now.key];
+    html += `<div class="now-bar"><span class="nb-ico">📖</span>现在是：<b>${now.label}${course ? ' · ' + course : ''}</b>${now.time ? `<span class="nb-time">${now.time}</span>` : ''}${st ? `<span class="nb-stats">答出 <b>${st.answered}</b> · 未答出 <b>${st.missed}</b></span>` : ''}</div>`;
+  }
+  html += '<table class="screen-tt"><tr><th class="stt-slot"></th>' + days.map((d, i) => `<th class="${today === i + 1 ? 'today' : ''}">${d}</th>`).join('') + '</tr>';
   for (const sl of slots) {
+    const isNow = !!(now && now.key === sl.key);
     const t = (tt.times || {})[sl.key];
     const timeHtml = (t && (t.s || t.e)) ? `<span class="stt-time">${t.s || ''}${t.s && t.e ? '—' : ''}${t.e || ''}</span>` : '';
-    html += `<tr class="${sl.extra ? 'stt-extra-row' : ''}"><td class="stt-slot${sl.extra ? ' stt-extra-slot' : ''}">${sl.label}${timeHtml}</td>`;
+    const nowTag = isNow ? '<span class="stt-now-tag">当前</span>' : '';
+    html += `<tr class="${sl.extra ? 'stt-extra-row' : ''}${isNow ? ' now' : ''}"><td class="stt-slot${sl.extra ? ' stt-extra-slot' : ''}">${nowTag}${sl.label}${timeHtml}</td>`;
     for (let d = 1; d <= 5; d++) {
       const course = (tt.cells || {})[d + '_' + sl.key];
       html += `<td class="${today === d ? 'today' : ''}">${course ? course : '<span class="stt-empty">—</span>'}</td>`;
@@ -214,6 +261,9 @@ function renderTtTable() {
   const show = S ? S.showTt !== false : true;
   el.style.display = show ? '' : 'none';
   $('standby').classList.toggle('tt-hidden', !show);
+  // 每分钟自动刷新当前课/时间状态
+  clearTimeout(renderTtTable._t);
+  if (show) renderTtTable._t = setTimeout(renderTtTable, 30000);
 }
 
 /* ---------- 视图切换 ---------- */

@@ -264,6 +264,20 @@ function renderTt() {
     th += `<div class="tt-time-row"><span class="tt-time-label${sl.extra ? ' tt-time-extra' : ''}">${sl.label}</span><input type="text" maxlength="5" placeholder="8:00" data-slot="${sl.key}" data-kind="s" value="${esc(t.s || '')}"><span class="tt-time-sep">—</span><input type="text" maxlength="5" placeholder="8:45" data-slot="${sl.key}" data-kind="e" value="${esc(t.e || '')}"></div>`;
   }
   $('ttTimes').innerHTML = th;
+  // 今日答题统计（stats 键为「slotKey_yyyy-MM-dd」）
+  const td = new Date();
+  const todayStr2 = td.getFullYear() + '-' + String(td.getMonth() + 1).padStart(2, '0') + '-' + String(td.getDate()).padStart(2, '0');
+  const slotLabel = {};
+  for (const sl of slots) slotLabel[sl.key] = sl.label;
+  const stats = tt.stats || {};
+  let sh = '';
+  for (const k in stats) {
+    if (!k.endsWith('_' + todayStr2)) continue;
+    const sk2 = k.slice(0, k.length - todayStr2.length - 1);
+    const st = stats[k];
+    sh += `<div class="tt-stat-row"><span class="tt-stat-slot">${slotLabel[sk2] || sk2}</span><span class="tt-stat-a">答出 ${st.answered}</span><span class="tt-stat-m">未答出 ${st.missed}</span><span class="tt-stat-total">共 ${st.total} 人</span></div>`;
+  }
+  $('ttStats').innerHTML = sh || '<div class="tt-stat-empty">今天还没有答题记录</div>';
   // 正在格子中输入时不重建，避免丢焦点
   const grid = $('ttGrid');
   if (document.activeElement && grid.contains(document.activeElement)) return;
@@ -285,6 +299,7 @@ $('ttPmPlus').onclick = () => cmd({ action: 'ttConfig', am: S.tt ? S.tt.am : 4, 
 $('ttClearBtn').onclick = () => { if (confirm('确定清空本班整周课表？')) cmd({ action: 'ttClear' }); };
 $('ttPreChk').addEventListener('change', e => cmd({ action: 'ttExtra', pre: e.target.checked ? 1 : 0 }));
 $('ttPostChk').addEventListener('change', e => cmd({ action: 'ttExtra', post: e.target.checked ? 1 : 0 }));
+$('ttStatsClearBtn').onclick = () => { if (confirm('确定清空本班今日答题统计？')) cmd({ action: 'ttStatsClear' }); };
 $('ttGrid').addEventListener('change', e => {
   if (e.target.dataset.d === undefined) return;
   cmd({ action: 'ttCell', day: +e.target.dataset.d, slot: e.target.dataset.s, course: e.target.value.trim() });

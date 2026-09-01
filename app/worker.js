@@ -28,6 +28,36 @@ function defaultRoster() {
 function todayStr() {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
 }
+// 根据课表时间判断当前属于哪一节（返回 slotKey 如 'pre'/'0'/1...，无课/未配时间返回 null）
+function currentSlotKey(tt) {
+  if (!tt || !tt.times) return null;
+  // Cloudflare 服务器是 UTC，先偏移到东八区再判断（否则节次时间全部错位 8 小时）
+  const sh = new Date(Date.now() + 8 * 3600 * 1000);
+  const dow = sh.getUTCDay();          // 1-5 周一~周五（东八区视角）
+  if (dow < 1 || dow > 5) return null;
+  const nowMin = sh.getUTCHours() * 60 + sh.getUTCMinutes();
+  const slots = [];
+  if (tt.pre) slots.push({ key: 'pre' });
+  for (let s = 0; s < (tt.am || 0); s++) slots.push({ key: String(s) });
+  for (let s = 0; s < (tt.pm || 0); s++) slots.push({ key: String((tt.am || 0) + s) });
+  if (tt.post) slots.push({ key: 'post' });
+  for (const sl of slots) {
+    const t = tt.times[sl.key];
+    if (!t || !t.s) continue;
+    const sp = String(t.s).split(':');
+    const sh = parseInt(sp[0], 10), sm = parseInt(sp[1], 10);
+    if (isNaN(sh)) continue;
+    const sMin = sh * 60 + (isNaN(sm) ? 0 : sm);
+    let eMin = Infinity;
+    if (t.e) {
+      const ep = String(t.e).split(':');
+      const eh = parseInt(ep[0], 10), em = parseInt(ep[1], 10);
+      if (!isNaN(eh)) eMin = eh * 60 + (isNaN(em) ? 0 : em);
+    }
+    if (nowMin >= sMin && nowMin < eMin) return sl.key;
+  }
+  return null;
+}
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 }
@@ -264,6 +294,17 @@ export class Room {
           else if (body.result === 'wrong') x.wrong = (x.wrong || 0) + 1;
           else x.none = (x.none || 0) + 1;
         }
+        // 每节课答题统计：答出(right/wrong) / 未答出(none)，按「节次_日期」累计
+        const sk = currentSlotKey(cls.tt);
+        if (sk !== null) {
+          cls.tt.stats = cls.tt.stats || {};
+          const tkey = sk + '_' + todayStr();
+          const st = cls.tt.stats[tkey] || { date: todayStr(), slot: sk, answered: 0, missed: 0, total: 0 };
+          st.total += session.lastPick.names.length;
+          if (body.result === 'right' || body.result === 'wrong') st.answered += session.lastPick.names.length;
+          else st.missed += session.lastPick.names.length;
+          cls.tt.stats[tkey] = st;
+        }
         session.answering = null;
         this.saveRoster();
         this.broadcast(roomId, { event: 'marked', result: body.result });
@@ -272,6 +313,15 @@ export class Room {
       case 'skip': {
         if (!session.lastPick) { ok = false; msg = '请先点名'; break; }
         for (const n of session.lastPick.names) { const x = find(n); if (x) x.skipped = (x.skipped || 0) + 1; }
+        const sk2 = currentSlotKey(cls.tt);
+        if (sk2 !== null) {
+          cls.tt.stats = cls.tt.stats || {};
+          const tkey2 = sk2 + '_' + todayStr();
+          const st2 = cls.tt.stats[tkey2] || { date: todayStr(), slot: sk2, answered: 0, missed: 0, total: 0 };
+          st2.total += session.lastPick.names.length;
+          st2.missed += session.lastPick.names.length;
+          cls.tt.stats[tkey2] = st2;
+        }
         session.answering = null; session.lastPick = null;
         this.saveRoster(); this.broadcast(roomId, { event: 'skipped' });
         const picked = this.pickStudents(roomId, { noRepeat: true });
@@ -326,6 +376,12 @@ export class Room {
         if (body.pre !== undefined) cls.tt.pre = body.pre ? 1 : 0;
         if (body.post !== undefined) cls.tt.post = body.post ? 1 : 0;
         this.saveRoster(); msg = '已更新早读/晚托设置';
+        break;
+      }
+      case 'ttStatsClear': {
+        if (!cls) { ok = false; msg = '无班级'; break; }
+        cls.tt.stats = {};
+        this.saveRoster(); msg = '答题统计已清空';
         break;
       }
       case 'ttCell': {

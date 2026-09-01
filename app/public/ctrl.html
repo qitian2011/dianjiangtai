@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=26">
-<script src="theme.js?v=26"></script>
+<link rel="stylesheet" href="style.css?v=27">
+<script src="theme.js?v=27"></script>
 </head>
 <body>
 <div class="ctrl-wrap">
@@ -192,6 +192,14 @@
       <div style="font-size:13px; color:var(--dim); margin-top:8px">为每一节设置上课/下课时间，格式如 8:00。时间可只填开始或只填结束；两格都清空则不显示。</div>
     </div>
     <div class="card">
+      <h3>今日答题统计（按当前上课时间自动归入对应节次）</h3>
+      <div id="ttStats"></div>
+      <div class="row" style="margin-top:8px; align-items:center">
+        <button class="btn small danger" id="ttStatsClearBtn">🗑 清空今日统计</button>
+        <span style="font-size:12px; color:var(--dim)">答题标记「答对/答错」计入回答出来，「未作答/跳过」计入没回答出来。</span>
+      </div>
+    </div>
+    <div class="card">
       <h3>一周课程表（在格子里直接填课程名，改完自动保存）</h3>
       <div id="ttGrid"></div>
     </div>
@@ -262,6 +270,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=26"></script>
+<script src="ctrl.js?v=27"></script>
 </body>
 </html>
