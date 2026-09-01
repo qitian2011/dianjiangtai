@@ -1,7 +1,7 @@
 /* 教师控制端逻辑 */
 let S = null;
 let selGroup = null, selCount = 1, selTimer = 60, selDur = 30;
-let pageSel = [], selPlace = null;
+let pageSel = [], selPlace = null;   // pageSel: [{n:姓名, s:学号}]，以学号定位防同名
 let lockRoll = false;
 const $ = id => document.getElementById(id);
 
@@ -97,23 +97,24 @@ function render() {
   // 本节课记录
   $('lessonList').innerHTML = S.lessonLog.length
     ? S.lessonLog.map(l => `<li><b>${(l.display || l.names).join('、')}</b><span>${timeStr(l.at)}</span></li>`).join('') : '<li>暂无</li>';
-  // 传呼候选学生（带组名）
+  // 传呼候选学生（姓名+学号；有学号显示学号、无学号显示组别，搜索姓名/学号均可）
   const kw = $('stuSearch').value.trim();
   $('pageStudents').innerHTML = S.students
-    .filter(s => !kw || s.name.includes(kw))
-    .map(s => `<span class="chip ${pageSel.includes(s.name) ? 'sel' : ''}" data-n="${s.name}">${s.group ? s.name + '·' + s.group : s.name}</span>`).join('') || '<span style="color:var(--dim)">无匹配学生</span>';
+    .filter(s => !kw || s.name.includes(kw) || (s.sid || '').includes(kw))
+    .map(s => `<span class="chip ${pageSel.some(x => x.n === s.name) ? 'sel' : ''}" data-n="${s.name}" data-s="${s.sid || ''}">${s.name}${s.sid ? '·' + s.sid : (s.group ? '·' + s.group : '')}</span>`).join('') || '<span style="color:var(--dim)">无匹配学生</span>';
   // 去处
   $('placeChips').innerHTML = S.places.map(p => `<span class="chip ${selPlace === p ? 'sel' : ''}" data-p="${p}">${p}</span>`).join('');
   $('fromInput').value = localStorage.getItem('teacherName') || $('fromInput').value;
-  // 当前传呼
+  // 当前传呼（姓名·学号）
   const p = S.page;
   $('activePage').style.display = p && !p.retracted && !p.confirmed ? '' : 'none';
   if (p && !p.retracted && !p.confirmed) {
-    $('activePageInfo').textContent = `${p.names.join('、')} → ${p.place}${p.from ? ' · 找' + p.from : ''} · ${timeStr(p.sentAt)}发出`;
+    const pn = (p.names || []).map((n, i) => p.sids && p.sids[i] ? `${n}·${p.sids[i]}` : n).join('、');
+    $('activePageInfo').textContent = `${pn} → ${p.place}${p.from ? ' · 找' + p.from : ''} · ${timeStr(p.sentAt)}发出`;
   }
   // 传呼记录
   $('pageLogList').innerHTML = S.pageLog.length
-    ? S.pageLog.slice().reverse().map(l => `<li><b>${l.names.join('、')}→${l.place}</b><span>${timeStr(l.sentAt)} ${l.confirmed ? '✅' : (l.retracted ? '撤回' : '…')}</span></li>`).join('') : '<li>暂无</li>';
+    ? S.pageLog.slice().reverse().map(l => `<li><b>${(l.names || []).map((n, i) => l.sids && l.sids[i] ? `${n}·${l.sids[i]}` : n).join('、')}→${l.place}</b><span>${timeStr(l.sentAt)} ${l.confirmed ? '✅' : (l.retracted ? '撤回' : '…')}</span></li>`).join('') : '<li>暂无</li>';
   // 名单（学号/组别旁直接改：权重 0=今天不点他，1=正常，2=双倍概率…；📌=加入今日请假）
   const absNow = S.absentToday || [];
   $('stuList').innerHTML = S.students.map(s => {
@@ -180,7 +181,8 @@ $('markBtns').addEventListener('click', e => { if (e.target.dataset.m) cmd({ act
 $('stuSearch').oninput = render;
 $('pageStudents').addEventListener('click', e => {
   const n = e.target.dataset.n; if (!n) return;
-  pageSel.includes(n) ? pageSel = pageSel.filter(x => x !== n) : pageSel.push(n);
+  const i = pageSel.findIndex(x => x.n === n);
+  i >= 0 ? pageSel.splice(i, 1) : pageSel.push({ n, s: e.target.dataset.s || '' });
   render();
 });
 $('placeChips').addEventListener('click', e => { if (e.target.dataset.p) { selPlace = e.target.dataset.p; render(); } });
@@ -204,7 +206,7 @@ $('pageBtn').onclick = async () => {
   if (pageSel.length === 0) return toast('请先选择学生');
   if (!selPlace) return toast('请选择去处');
   localStorage.setItem('teacherName', $('fromInput').value.trim());
-  await cmd({ action: 'page', names: pageSel, place: selPlace, from: $('fromInput').value.trim(), note: $('noteInput').value.trim(), duration: selDur });
+  await cmd({ action: 'page', names: pageSel.map(x => x.n), sids: pageSel.map(x => x.s), place: selPlace, from: $('fromInput').value.trim(), note: $('noteInput').value.trim(), duration: selDur });
   pageSel = []; $('noteInput').value = ''; render();
 };
 $('confirmBtn').onclick = () => cmd({ action: 'pageConfirm' });
