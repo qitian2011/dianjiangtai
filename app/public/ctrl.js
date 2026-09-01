@@ -97,11 +97,11 @@ function render() {
   // 本节课记录
   $('lessonList').innerHTML = S.lessonLog.length
     ? S.lessonLog.map(l => `<li><b>${(l.display || l.names).join('、')}</b><span>${timeStr(l.at)}</span></li>`).join('') : '<li>暂无</li>';
-  // 传呼候选学生（带组名）
+  // 传呼候选学生（带组名；搜索支持姓名/学号，学号命中时附显学号）
   const kw = $('stuSearch').value.trim();
   $('pageStudents').innerHTML = S.students
-    .filter(s => !kw || s.name.includes(kw))
-    .map(s => `<span class="chip ${pageSel.includes(s.name) ? 'sel' : ''}" data-n="${s.name}">${s.group ? s.name + '·' + s.group : s.name}</span>`).join('') || '<span style="color:var(--dim)">无匹配学生</span>';
+    .filter(s => !kw || s.name.includes(kw) || (s.sid || '').includes(kw))
+    .map(s => `<span class="chip ${pageSel.includes(s.name) ? 'sel' : ''}" data-n="${s.name}">${s.group ? s.name + '·' + s.group : s.name}${kw && (s.sid || '').includes(kw) ? '·' + s.sid : ''}</span>`).join('') || '<span style="color:var(--dim)">无匹配学生</span>';
   // 去处
   $('placeChips').innerHTML = S.places.map(p => `<span class="chip ${selPlace === p ? 'sel' : ''}" data-p="${p}">${p}</span>`).join('');
   $('fromInput').value = localStorage.getItem('teacherName') || $('fromInput').value;
