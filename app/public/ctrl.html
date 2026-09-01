@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=25">
-<script src="theme.js?v=25"></script>
+<link rel="stylesheet" href="style.css?v=26">
+<script src="theme.js?v=26"></script>
 </head>
 <body>
 <div class="ctrl-wrap">
@@ -178,6 +178,12 @@
         <span style="flex:1"></span>
         <button class="btn small danger" id="ttClearBtn">🗑 清空课表</button>
       </div>
+      <div class="row" style="align-items:center; gap:8px; margin-top:12px">
+        <label class="switch"><input type="checkbox" id="ttPreChk">早读课</label>
+        <span style="width:16px"></span>
+        <label class="switch"><input type="checkbox" id="ttPostChk">晚托课</label>
+        <span style="font-size:12px; color:var(--dim)">开启后大屏课表首行显示早读、末行显示晚托，可分别填课程与时间</span>
+      </div>
       <div style="font-size:13px; color:var(--dim); margin-top:8px">课表按班级保存，大屏直接显示整周课表；格子留空表示无课。</div>
     </div>
     <div class="card">
@@ -256,6 +262,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=25"></script>
+<script src="ctrl.js?v=26"></script>
 </body>
 </html>

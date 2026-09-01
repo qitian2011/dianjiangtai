@@ -249,23 +249,29 @@ function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;'
 function renderTt() {
   const tt = S.tt || { am: 4, pm: 3, cells: {} };
   $('ttAmVal').textContent = tt.am; $('ttPmVal').textContent = tt.pm;
+  $('ttPreChk').checked = !!tt.pre;
+  $('ttPostChk').checked = !!tt.post;
+  // 构建节次列表：早读 → 上午 → 下午 → 晚托
+  const slots = [];
+  if (tt.pre) slots.push({ key: 'pre', label: '早读', extra: true });
+  for (let s = 0; s < tt.am; s++) slots.push({ key: s, label: '上午' + (s + 1) + '节' });
+  for (let s = 0; s < tt.pm; s++) slots.push({ key: tt.am + s, label: '下午' + (s + 1) + '节' });
+  if (tt.post) slots.push({ key: 'post', label: '晚托', extra: true });
   // 每节课时间（独立于课程格子渲染，正在输入时不重建避免丢焦点）
   let th = '';
-  for (let s = 0; s < tt.am + tt.pm; s++) {
-    const label = (s < tt.am ? '上午' : '下午') + (s < tt.am ? s + 1 : s - tt.am + 1) + '节';
-    const t = (tt.times || {})[s] || {};
-    th += `<div class="tt-time-row"><span class="tt-time-label">${label}</span><input type="text" maxlength="5" placeholder="8:00" data-slot="${s}" data-kind="s" value="${esc(t.s || '')}"><span class="tt-time-sep">—</span><input type="text" maxlength="5" placeholder="8:45" data-slot="${s}" data-kind="e" value="${esc(t.e || '')}"></div>`;
+  for (const sl of slots) {
+    const t = (tt.times || {})[sl.key] || {};
+    th += `<div class="tt-time-row"><span class="tt-time-label${sl.extra ? ' tt-time-extra' : ''}">${sl.label}</span><input type="text" maxlength="5" placeholder="8:00" data-slot="${sl.key}" data-kind="s" value="${esc(t.s || '')}"><span class="tt-time-sep">—</span><input type="text" maxlength="5" placeholder="8:45" data-slot="${sl.key}" data-kind="e" value="${esc(t.e || '')}"></div>`;
   }
   $('ttTimes').innerHTML = th;
   // 正在格子中输入时不重建，避免丢焦点
   const grid = $('ttGrid');
   if (document.activeElement && grid.contains(document.activeElement)) return;
   let html = '<table class="tt-table"><tr><th class="tt-slot-h"></th>' + TT_DAYS.map(d => `<th>${d}</th>`).join('') + '</tr>';
-  for (let s = 0; s < tt.am + tt.pm; s++) {
-    const label = (s < tt.am ? '上午' : '下午') + (s < tt.am ? s + 1 : s - tt.am + 1) + '节';
-    html += `<tr><td class="tt-slot">${label}</td>`;
+  for (const sl of slots) {
+    html += `<tr class="${sl.extra ? 'tt-extra-row' : ''}"><td class="tt-slot${sl.extra ? ' tt-extra-slot' : ''}">${sl.label}</td>`;
     for (let d = 1; d <= 5; d++) {
-      html += `<td><input type="text" maxlength="12" placeholder="—" data-d="${d}" data-s="${s}" value="${esc(tt.cells[d + '_' + s] || '')}"></td>`;
+      html += `<td><input type="text" maxlength="12" placeholder="—" data-d="${d}" data-s="${sl.key}" value="${esc(tt.cells[d + '_' + sl.key] || '')}"></td>`;
     }
     html += '</tr>';
   }
@@ -277,9 +283,11 @@ $('ttAmPlus').onclick = () => cmd({ action: 'ttConfig', am: Math.min(8, (S.tt ? 
 $('ttPmMinus').onclick = () => cmd({ action: 'ttConfig', am: S.tt ? S.tt.am : 4, pm: Math.max(1, (S.tt ? S.tt.pm : 3) - 1) });
 $('ttPmPlus').onclick = () => cmd({ action: 'ttConfig', am: S.tt ? S.tt.am : 4, pm: Math.min(8, (S.tt ? S.tt.pm : 3) + 1) });
 $('ttClearBtn').onclick = () => { if (confirm('确定清空本班整周课表？')) cmd({ action: 'ttClear' }); };
+$('ttPreChk').addEventListener('change', e => cmd({ action: 'ttExtra', pre: e.target.checked ? 1 : 0 }));
+$('ttPostChk').addEventListener('change', e => cmd({ action: 'ttExtra', post: e.target.checked ? 1 : 0 }));
 $('ttGrid').addEventListener('change', e => {
   if (e.target.dataset.d === undefined) return;
-  cmd({ action: 'ttCell', day: +e.target.dataset.d, slot: +e.target.dataset.s, course: e.target.value.trim() });
+  cmd({ action: 'ttCell', day: +e.target.dataset.d, slot: e.target.dataset.s, course: e.target.value.trim() });
 });
 /* 每节课时间：行内开始/结束输入，改完自动保存（两格都空=删除该节时间） */
 $('ttTimes').addEventListener('change', e => {
@@ -287,7 +295,7 @@ $('ttTimes').addEventListener('change', e => {
   const row = e.target.closest('.tt-time-row');
   cmd({
     action: 'ttTime',
-    slot: +e.target.dataset.slot,
+    slot: e.target.dataset.slot,
     start: row.querySelector('input[data-kind="s"]').value.trim(),
     end: row.querySelector('input[data-kind="e"]').value.trim()
   });

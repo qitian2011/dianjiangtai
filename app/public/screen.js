@@ -190,14 +190,19 @@ function renderTtTable() {
   const tt = (S && S.tt) || { am: 4, pm: 3, cells: {} };
   const days = ['周一', '周二', '周三', '周四', '周五'];
   const today = new Date().getDay();   // 0=周日
+  // 节次列表：早读 → 上午 → 下午 → 晚托
+  const slots = [];
+  if (tt.pre) slots.push({ key: 'pre', label: '早读', extra: true });
+  for (let s = 0; s < tt.am; s++) slots.push({ key: s, label: '上午' + (s + 1) + '节' });
+  for (let s = 0; s < tt.pm; s++) slots.push({ key: tt.am + s, label: '下午' + (s + 1) + '节' });
+  if (tt.post) slots.push({ key: 'post', label: '晚托', extra: true });
   let html = '<table class="screen-tt"><tr><th class="stt-slot"></th>' + days.map((d, i) => `<th class="${today === i + 1 ? 'today' : ''}">${d}</th>`).join('') + '</tr>';
-  for (let s = 0; s < tt.am + tt.pm; s++) {
-    const label = (s < tt.am ? '上午' : '下午') + (s < tt.am ? s + 1 : s - tt.am + 1) + '节';
-    const t = (tt.times || {})[s];
+  for (const sl of slots) {
+    const t = (tt.times || {})[sl.key];
     const timeHtml = (t && (t.s || t.e)) ? `<span class="stt-time">${t.s || ''}${t.s && t.e ? '—' : ''}${t.e || ''}</span>` : '';
-    html += `<tr><td class="stt-slot">${label}${timeHtml}</td>`;
+    html += `<tr class="${sl.extra ? 'stt-extra-row' : ''}"><td class="stt-slot${sl.extra ? ' stt-extra-slot' : ''}">${sl.label}${timeHtml}</td>`;
     for (let d = 1; d <= 5; d++) {
-      const course = (tt.cells || {})[d + '_' + s];
+      const course = (tt.cells || {})[d + '_' + sl.key];
       html += `<td class="${today === d ? 'today' : ''}">${course ? course : '<span class="stt-empty">—</span>'}</td>`;
     }
     html += '</tr>';

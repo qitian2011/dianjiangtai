@@ -383,12 +383,15 @@ label.switch input:checked::after { transform: translateX(19px); }
 .tt-table th, .tt-table td { border: 1px solid var(--separator); padding: 4px 6px; text-align: center; }
 .tt-table th { background: var(--card2); color: var(--dim); font-weight: 600; }
 .tt-table .tt-slot { background: var(--card2); color: var(--dim); white-space: nowrap; font-size: 12px; width: 64px; }
+.tt-table .tt-extra-row td { background: rgba(255,159,10,.05); }
+.tt-table .tt-extra-slot { color: #ff9f0a; font-weight: 700; }
 .tt-table td input { width: 100%; min-width: 64px; border: none; background: transparent; color: var(--text); text-align: center; font-size: 14px; padding: 4px 0; outline: none; }
 .tt-table td input:focus { background: var(--card2); border-radius: 6px; }
 /* 每节课时间编辑行（控制端） */
 .tt-time-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--separator); }
 .tt-time-row:last-child { border-bottom: none; }
 .tt-time-label { flex: 0 0 64px; font-size: 13px; color: var(--dim); white-space: nowrap; }
+.tt-time-label.tt-time-extra { color: #ff9f0a; font-weight: 700; }
 .tt-time-row input { width: 72px; background: var(--card2); color: var(--text); border: 1px solid var(--separator); border-radius: 10px; padding: 7px 8px; font-size: 14px; text-align: center; outline: none; transition: border-color .2s, box-shadow .2s; }
 .tt-time-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255,.18); }
 .tt-time-sep { color: var(--dim); }
@@ -401,6 +404,10 @@ label.switch input:checked::after { transform: translateX(19px); }
 .screen-tt th, .screen-tt td { border: 1px solid var(--separator); padding: 1.4vmin 2.2vmin; font-size: 3.2vmin; color: var(--text); text-align: center; word-break: break-word; }
 .screen-tt th { background: var(--card2); color: var(--dim); font-weight: 600; }
 .screen-tt .stt-slot { background: var(--card2); color: var(--dim); white-space: nowrap; font-size: 2.6vmin; line-height: 1.4; }
+/* 早读/晚托行：橙色标签 + 轻微底色区分 */
+.screen-tt .stt-extra-slot { color: #ff9f0a; font-weight: 700; }
+.screen-tt tr.stt-extra-row td { background: rgba(255,159,10,.06); }
+.screen-tt tr.stt-extra-row td.today { background: rgba(255,159,10,.14); }
 .screen-tt .stt-time { display: block; margin-top: .4vmin; font-size: 2vmin; color: var(--dim); opacity: .85; letter-spacing: .1vmin; }
 .screen-tt th.today { color: #fff; background: var(--accent); }
 .screen-tt td.today { background: rgba(10,132,255,.14); }

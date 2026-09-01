@@ -48,6 +48,8 @@ roster.classes.forEach((c, i) => {
   if (!c.tt.times) c.tt.times = {};
   if (!c.tt.am) c.tt.am = 4;
   if (!c.tt.pm) c.tt.pm = 3;
+  if (c.tt.pre === undefined) c.tt.pre = 0;    // 早读课开关
+  if (c.tt.post === undefined) c.tt.post = 0;  // 晚托课开关
   if (!c.notice || typeof c.notice !== 'object') c.notice = { text: '', at: 0 };   // 班级公告
 });
 function saveRoster() { fs.writeFileSync(ROSTER_FILE, JSON.stringify(roster, null, 2), 'utf8'); }
@@ -301,16 +303,25 @@ function handleCmd(body, res, roomId) {
       if (!cls) { ok = false; msg = '无班级'; break; }
       const am = Math.min(8, Math.max(1, body.am | 0));
       const pm = Math.min(8, Math.max(1, body.pm | 0));
-      cls.tt = { am, pm, cells: cls.tt && cls.tt.cells ? cls.tt.cells : {}, times: cls.tt && cls.tt.times ? cls.tt.times : {} };
+      cls.tt = { am, pm, pre: cls.tt && cls.tt.pre ? 1 : 0, post: cls.tt && cls.tt.post ? 1 : 0, cells: cls.tt && cls.tt.cells ? cls.tt.cells : {}, times: cls.tt && cls.tt.times ? cls.tt.times : {} };
       saveRoster(); msg = `课表已设为上午${am}节、下午${pm}节`;
+      break;
+    }
+    case 'ttExtra': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      if (body.pre !== undefined) cls.tt.pre = body.pre ? 1 : 0;
+      if (body.post !== undefined) cls.tt.post = body.post ? 1 : 0;
+      saveRoster(); msg = '已更新早读/晚托设置';
       break;
     }
     case 'ttCell': {
       if (!cls) { ok = false; msg = '无班级'; break; }
-      const day = body.day | 0, slot = body.slot | 0;
-      if (day < 1 || day > 5 || slot < 0 || slot >= (cls.tt.am + cls.tt.pm)) { ok = false; msg = '无效位置'; break; }
+      const day = body.day | 0;
+      const slotKey = String(body.slot);
+      const isExtra = slotKey === 'pre' || slotKey === 'post';
+      if (day < 1 || day > 5 || (!isExtra && (isNaN(+slotKey) || +slotKey < 0 || +slotKey >= (cls.tt.am + cls.tt.pm)))) { ok = false; msg = '无效位置'; break; }
       const course = String(body.course || '').trim().slice(0, 12);
-      if (course) cls.tt.cells[day + '_' + slot] = course; else delete cls.tt.cells[day + '_' + slot];
+      if (course) cls.tt.cells[day + '_' + slotKey] = course; else delete cls.tt.cells[day + '_' + slotKey];
       saveRoster();
       break;
     }
@@ -321,13 +332,14 @@ function handleCmd(body, res, roomId) {
     }
     case 'ttTime': {
       if (!cls) { ok = false; msg = '无班级'; break; }
-      const slot = body.slot | 0;
-      if (slot < 0 || slot >= (cls.tt.am + cls.tt.pm)) { ok = false; msg = '无效节次'; break; }
+      const slotKey = String(body.slot);
+      const isExtra = slotKey === 'pre' || slotKey === 'post';
+      if (!isExtra && (isNaN(+slotKey) || +slotKey < 0 || +slotKey >= (cls.tt.am + cls.tt.pm))) { ok = false; msg = '无效节次'; break; }
       const start = String(body.start || '').trim().slice(0, 5);
       const end = String(body.end || '').trim().slice(0, 5);
       cls.tt.times = cls.tt.times || {};
-      if (start || end) cls.tt.times[slot] = { s: start, e: end };
-      else delete cls.tt.times[slot];
+      if (start || end) cls.tt.times[slotKey] = { s: start, e: end };
+      else delete cls.tt.times[slotKey];
       saveRoster();
       break;
     }
