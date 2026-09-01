@@ -404,7 +404,7 @@ label.switch input:checked::after { transform: translateX(19px); }
 .tt-stat-total { margin-left: auto; color: var(--dim); font-size: 13px; }
 .tt-stat-empty { color: var(--dim); font-size: 13px; padding: 6px 2px; }
 /* 大屏课表（待机页常驻，传统表格排版） */
-#standbyTt { width: fit-content; max-width: 100%; max-height: 62vh; overflow: auto; background: var(--glass); border: 1px solid var(--separator); border-radius: 3.4vmin; padding: 2.6vmin 3vmin; box-shadow: 0 2.5vmin 7vmin rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.07); backdrop-filter: blur(32px) saturate(1.7); -webkit-backdrop-filter: blur(32px) saturate(1.7); animation: fadeUp .5s cubic-bezier(.2,1,.4,1); }
+#standbyTt { width: fit-content; max-width: 100%; max-height: 70vh; overflow: auto; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; background: var(--glass); border: 1px solid var(--separator); border-radius: 3.4vmin; padding: 2.6vmin 3vmin; box-shadow: 0 2.5vmin 7vmin rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.07); backdrop-filter: blur(32px) saturate(1.7); -webkit-backdrop-filter: blur(32px) saturate(1.7); animation: fadeUp .5s cubic-bezier(.2,1,.4,1); }
 #standbyTt::-webkit-scrollbar { width: 4px; height: 4px; }
 #standbyTt::-webkit-scrollbar-thumb { background: rgba(127,127,127,.35); border-radius: 4px; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(1.6vmin); } to { opacity: 1; transform: translateY(0); } }
@@ -437,8 +437,8 @@ label.switch input:checked::after { transform: translateX(19px); }
 .screen .qr-corner svg { width: 13vmin; height: 13vmin; background: #fff; padding: .8vmin; border-radius: 1.6vmin; box-shadow: 0 1vmin 3vmin rgba(0,0,0,.35); }
 .screen .qr-corner-label { margin-top: .6vmin; font-size: 1.8vmin; color: var(--dim); padding: .3vmin 1.2vmin; border-radius: 999px; background: rgba(127,127,127,.14); }
 /* 公告栏：待机页左侧毛玻璃面板（长文可滚动） */
-.screen #standby { display: flex; flex-direction: column; align-items: center; width: 100%; height: 100%; min-height: 0; justify-content: center; }
-.screen .standby-row { display: flex; align-items: stretch; gap: 4vmin; width: 94%; max-width: 172vmin; max-height: 100%; min-height: 0; }
+.screen #standby { display: flex; flex-direction: column; align-items: center; width: 100%; height: 100%; min-height: 0; justify-content: center; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.screen .standby-row { display: flex; align-items: stretch; gap: 4vmin; width: 94%; max-width: 172vmin; max-height: 100%; min-height: 0; margin: auto 0; }
 /* 设置里关闭「大屏课表显示」后：隐藏课表面板，公告居中 */
 .screen #standby.tt-hidden .standby-row { justify-content: center; }
 .screen #standby.tt-hidden .tt-panel { display: none; }
