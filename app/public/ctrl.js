@@ -141,6 +141,8 @@ function render() {
   syncChips('animChips', 'ms', String(S.animationMs));
   syncChips('voiceChips', 'm', S.voiceMode || 'sound');
   syncChips('themeChips', 't', (window.__getTheme ? __getTheme() : 'auto'));
+  // 大屏课表显示开关
+  $('showTtChk').checked = S.showTt !== false;
 }
 
 function syncChips(containerId, attr, val) {
@@ -247,6 +249,14 @@ function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;'
 function renderTt() {
   const tt = S.tt || { am: 4, pm: 3, cells: {} };
   $('ttAmVal').textContent = tt.am; $('ttPmVal').textContent = tt.pm;
+  // 每节课时间（独立于课程格子渲染，正在输入时不重建避免丢焦点）
+  let th = '';
+  for (let s = 0; s < tt.am + tt.pm; s++) {
+    const label = (s < tt.am ? '上午' : '下午') + (s < tt.am ? s + 1 : s - tt.am + 1) + '节';
+    const t = (tt.times || {})[s] || {};
+    th += `<div class="tt-time-row"><span class="tt-time-label">${label}</span><input type="text" maxlength="5" placeholder="8:00" data-slot="${s}" data-kind="s" value="${esc(t.s || '')}"><span class="tt-time-sep">—</span><input type="text" maxlength="5" placeholder="8:45" data-slot="${s}" data-kind="e" value="${esc(t.e || '')}"></div>`;
+  }
+  $('ttTimes').innerHTML = th;
   // 正在格子中输入时不重建，避免丢焦点
   const grid = $('ttGrid');
   if (document.activeElement && grid.contains(document.activeElement)) return;
@@ -271,6 +281,19 @@ $('ttGrid').addEventListener('change', e => {
   if (e.target.dataset.d === undefined) return;
   cmd({ action: 'ttCell', day: +e.target.dataset.d, slot: +e.target.dataset.s, course: e.target.value.trim() });
 });
+/* 每节课时间：行内开始/结束输入，改完自动保存（两格都空=删除该节时间） */
+$('ttTimes').addEventListener('change', e => {
+  if (e.target.dataset.slot === undefined) return;
+  const row = e.target.closest('.tt-time-row');
+  cmd({
+    action: 'ttTime',
+    slot: +e.target.dataset.slot,
+    start: row.querySelector('input[data-kind="s"]').value.trim(),
+    end: row.querySelector('input[data-kind="e"]').value.trim()
+  });
+});
+/* 大屏课表显示/隐藏（按班级保存） */
+$('showTtChk').onchange = () => cmd({ action: 'setShowTt', on: $('showTtChk').checked });
 /* 公告栏：发布/清除（按班级保存，大屏待机页常驻） */
 $('noticeSaveBtn').onclick = () => cmd({ action: 'setNotice', text: $('noticeText').value.trim() });
 $('noticeClearBtn').onclick = () => { if (confirm('确定清除当前公告？')) cmd({ action: 'setNotice', text: '' }); };

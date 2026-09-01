@@ -385,6 +385,13 @@ label.switch input:checked::after { transform: translateX(19px); }
 .tt-table .tt-slot { background: var(--card2); color: var(--dim); white-space: nowrap; font-size: 12px; width: 64px; }
 .tt-table td input { width: 100%; min-width: 64px; border: none; background: transparent; color: var(--text); text-align: center; font-size: 14px; padding: 4px 0; outline: none; }
 .tt-table td input:focus { background: var(--card2); border-radius: 6px; }
+/* 每节课时间编辑行（控制端） */
+.tt-time-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px dashed var(--separator); }
+.tt-time-row:last-child { border-bottom: none; }
+.tt-time-label { flex: 0 0 64px; font-size: 13px; color: var(--dim); white-space: nowrap; }
+.tt-time-row input { width: 72px; background: var(--card2); color: var(--text); border: 1px solid var(--separator); border-radius: 10px; padding: 7px 8px; font-size: 14px; text-align: center; outline: none; transition: border-color .2s, box-shadow .2s; }
+.tt-time-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255,.18); }
+.tt-time-sep { color: var(--dim); }
 /* 大屏课表（待机页常驻，传统表格排版） */
 #standbyTt { width: fit-content; max-width: 94%; max-height: 62vh; overflow-y: auto; background: var(--glass); border: 1px solid var(--separator); border-radius: 3.4vmin; padding: 2.6vmin 3vmin; box-shadow: 0 2.5vmin 7vmin rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.07); backdrop-filter: blur(32px) saturate(1.7); -webkit-backdrop-filter: blur(32px) saturate(1.7); animation: fadeUp .5s cubic-bezier(.2,1,.4,1); }
 #standbyTt::-webkit-scrollbar { width: 4px; }
@@ -393,7 +400,8 @@ label.switch input:checked::after { transform: translateX(19px); }
 .screen-tt { border-collapse: collapse; margin: 0 auto; }
 .screen-tt th, .screen-tt td { border: 1px solid var(--separator); padding: 1.4vmin 2.2vmin; font-size: 3.2vmin; color: var(--text); text-align: center; word-break: break-word; }
 .screen-tt th { background: var(--card2); color: var(--dim); font-weight: 600; }
-.screen-tt .stt-slot { background: var(--card2); color: var(--dim); white-space: nowrap; font-size: 2.6vmin; }
+.screen-tt .stt-slot { background: var(--card2); color: var(--dim); white-space: nowrap; font-size: 2.6vmin; line-height: 1.4; }
+.screen-tt .stt-time { display: block; margin-top: .4vmin; font-size: 2vmin; color: var(--dim); opacity: .85; letter-spacing: .1vmin; }
 .screen-tt th.today { color: #fff; background: var(--accent); }
 .screen-tt td.today { background: rgba(10,132,255,.14); }
 .screen-tt .stt-empty { opacity: .35; }
@@ -404,6 +412,9 @@ label.switch input:checked::after { transform: translateX(19px); }
 /* 公告栏：待机页左侧毛玻璃面板（长文可滚动） */
 .screen #standby { display: flex; flex-direction: column; align-items: center; width: 100%; height: 100%; min-height: 0; justify-content: center; }
 .screen .standby-row { display: flex; align-items: stretch; gap: 4vmin; width: 94%; max-width: 172vmin; max-height: 100%; min-height: 0; }
+/* 设置里关闭「大屏课表显示」后：隐藏课表面板，公告居中 */
+.screen #standby.tt-hidden .standby-row { justify-content: center; }
+.screen #standby.tt-hidden .tt-panel { display: none; }
 .screen .notice-panel { flex: 0 0 34vmin; min-width: 180px; max-width: 380px; max-height: 58vh; overflow-y: auto; text-align: left; background: var(--glass); border: 1px solid var(--separator); border-radius: 3vmin; padding: 2.6vmin 3vmin; backdrop-filter: blur(32px) saturate(1.7); -webkit-backdrop-filter: blur(32px) saturate(1.7); box-shadow: 0 2.5vmin 7vmin rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.07); animation: fadeUp .5s cubic-bezier(.2,1,.4,1); }
 .screen .notice-panel::-webkit-scrollbar { width: 4px; }
 .screen .notice-panel::-webkit-scrollbar-thumb { background: rgba(127,127,127,.35); border-radius: 4px; }

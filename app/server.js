@@ -42,8 +42,10 @@ roster.classes.forEach((c, i) => {
   if (c.prefs.volume === undefined) c.prefs.volume = 0.3;
   if (c.prefs.animationMs === undefined) c.prefs.animationMs = 3000;
   if (c.prefs.voiceMode === undefined) c.prefs.voiceMode = 'sound';
+  if (c.prefs.showTt === undefined) c.prefs.showTt = true;
   if (!c.tt || typeof c.tt !== 'object') c.tt = { am: 4, pm: 3, cells: {} };   // 班级课表
   if (!c.tt.cells) c.tt.cells = {};
+  if (!c.tt.times) c.tt.times = {};
   if (!c.tt.am) c.tt.am = 4;
   if (!c.tt.pm) c.tt.pm = 3;
   if (!c.notice || typeof c.notice !== 'object') c.notice = { text: '', at: 0 };   // 班级公告
@@ -138,6 +140,7 @@ function snapshot(roomId) {
     allClasses: roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass })),
     currentClass: roomClassIndex(roomId, room),
     tt: cls.tt || { am: 4, pm: 3, cells: {} },
+    showTt: cls.prefs ? cls.prefs.showTt !== false : true,
     notice: cls.notice || { text: '', at: 0 },
     places: roster.places,
     pickedThisRound: room.pickedThisRound,
@@ -298,7 +301,7 @@ function handleCmd(body, res, roomId) {
       if (!cls) { ok = false; msg = '无班级'; break; }
       const am = Math.min(8, Math.max(1, body.am | 0));
       const pm = Math.min(8, Math.max(1, body.pm | 0));
-      cls.tt = { am, pm, cells: cls.tt && cls.tt.cells ? cls.tt.cells : {} };
+      cls.tt = { am, pm, cells: cls.tt && cls.tt.cells ? cls.tt.cells : {}, times: cls.tt && cls.tt.times ? cls.tt.times : {} };
       saveRoster(); msg = `课表已设为上午${am}节、下午${pm}节`;
       break;
     }
@@ -314,6 +317,25 @@ function handleCmd(body, res, roomId) {
     case 'ttClear': {
       if (!cls) { ok = false; msg = '无班级'; break; }
       cls.tt.cells = {}; saveRoster(); msg = '课表已清空';
+      break;
+    }
+    case 'ttTime': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const slot = body.slot | 0;
+      if (slot < 0 || slot >= (cls.tt.am + cls.tt.pm)) { ok = false; msg = '无效节次'; break; }
+      const start = String(body.start || '').trim().slice(0, 5);
+      const end = String(body.end || '').trim().slice(0, 5);
+      cls.tt.times = cls.tt.times || {};
+      if (start || end) cls.tt.times[slot] = { s: start, e: end };
+      else delete cls.tt.times[slot];
+      saveRoster();
+      break;
+    }
+    case 'setShowTt': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      cls.prefs = cls.prefs || {};
+      cls.prefs.showTt = !!body.on;
+      saveRoster(); msg = body.on ? '大屏已显示课表' : '大屏已隐藏课表';
       break;
     }
     case 'setClassPass': {

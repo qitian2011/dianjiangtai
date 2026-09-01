@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=23">
-<script src="theme.js?v=23"></script>
+<link rel="stylesheet" href="style.css?v=24">
+<script src="theme.js?v=24"></script>
 </head>
 <body>
 <div class="ctrl-wrap">
@@ -178,7 +178,12 @@
         <span style="flex:1"></span>
         <button class="btn small danger" id="ttClearBtn">🗑 清空课表</button>
       </div>
-      <div style="font-size:13px; color:var(--dim); margin-top:8px">课表按班级保存，大屏点「📅 课表」即可显示整周课表；格子留空表示无课。</div>
+      <div style="font-size:13px; color:var(--dim); margin-top:8px">课表按班级保存，大屏直接显示整周课表；格子留空表示无课。</div>
+    </div>
+    <div class="card">
+      <h3>每节课时间（可选，大屏课表会显示）</h3>
+      <div id="ttTimes"></div>
+      <div style="font-size:13px; color:var(--dim); margin-top:8px">为每一节设置上课/下课时间，格式如 8:00。时间可只填开始或只填结束；两格都清空则不显示。</div>
     </div>
     <div class="card">
       <h3>一周课程表（在格子里直接填课程名，改完自动保存）</h3>
@@ -201,6 +206,11 @@
       <div class="count-select" id="animChips">
         <span class="chip" data-ms="2000">快 2秒</span><span class="chip sel" data-ms="3000">标准 3秒</span><span class="chip" data-ms="5000">仪式感 5秒</span>
       </div>
+    </div>
+    <div class="card">
+      <h3>大屏课表显示</h3>
+      <label class="switch"><input type="checkbox" id="showTtChk"> 在大屏待机页显示本周课表</label>
+      <div style="font-size:13px; color:var(--dim); margin-top:8px">关闭后大屏只显示公告，不显示课表（按班级保存）</div>
     </div>
     <div class="card">
       <h3>大屏提示方式（点名结果 / 传呼 / 答题计时）</h3>
@@ -246,6 +256,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=23"></script>
+<script src="ctrl.js?v=24"></script>
 </body>
 </html>

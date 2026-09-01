@@ -193,7 +193,9 @@ function renderTtTable() {
   let html = '<table class="screen-tt"><tr><th class="stt-slot"></th>' + days.map((d, i) => `<th class="${today === i + 1 ? 'today' : ''}">${d}</th>`).join('') + '</tr>';
   for (let s = 0; s < tt.am + tt.pm; s++) {
     const label = (s < tt.am ? '上午' : '下午') + (s < tt.am ? s + 1 : s - tt.am + 1) + '节';
-    html += `<tr><td class="stt-slot">${label}</td>`;
+    const t = (tt.times || {})[s];
+    const timeHtml = (t && (t.s || t.e)) ? `<span class="stt-time">${t.s || ''}${t.s && t.e ? '—' : ''}${t.e || ''}</span>` : '';
+    html += `<tr><td class="stt-slot">${label}${timeHtml}</td>`;
     for (let d = 1; d <= 5; d++) {
       const course = (tt.cells || {})[d + '_' + s];
       html += `<td class="${today === d ? 'today' : ''}">${course ? course : '<span class="stt-empty">—</span>'}</td>`;
@@ -201,7 +203,12 @@ function renderTtTable() {
     html += '</tr>';
   }
   html += '</table>';
-  $('standbyTt').innerHTML = html;
+  const el = $('standbyTt');
+  el.innerHTML = html;
+  // 设置里的「大屏课表显示」开关：关闭时隐藏课表面板，公告居中
+  const show = S ? S.showTt !== false : true;
+  el.style.display = show ? '' : 'none';
+  $('standby').classList.toggle('tt-hidden', !show);
 }
 
 /* ---------- 视图切换 ---------- */
