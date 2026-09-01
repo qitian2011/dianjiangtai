@@ -422,6 +422,36 @@ export class Room {
         msg = `已导入「${name}」${students.length} 人`;
         break;
       }
+      case 'replaceRoster': {
+        // 替换已有班级的完整名单（保留 prefs/课表/公告等班级设置，统计清零）
+        const lines = String(body.text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const students = lines.map(l => {
+          const p = l.split(/[,，\t]/).map(x => x.trim());
+          let name = p[0], sid = '', group = '', weight = 1;
+          if (p.length >= 4) { sid = p[1]; group = p[2]; weight = parseFloat(p[3]) || 1; }
+          else if (p.length === 3) {
+            if (isNaN(parseFloat(p[2]))) { sid = p[1]; group = p[2]; }
+            else { group = p[1]; weight = parseFloat(p[2]) || 1; }
+          }
+          else if (p.length === 2) {
+            if (/^\d+$/.test(p[1])) sid = p[1]; else group = p[1];
+          }
+          return { name, sid: sid.slice(0, 20), group: group.slice(0, 12), weight, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 };
+        }).filter(x => x.name);
+        if (students.length === 0) { ok = false; msg = '没有解析到有效名单'; break; }
+        const norm = s => String(s || '').replace(/[（）()]/g, '').trim();
+        let ci = -1;
+        if (body.rid) ci = roster.classes.findIndex(c => c.rid === String(body.rid));
+        if (ci < 0 && body.name) ci = roster.classes.findIndex(c => norm(c.name) === norm(body.name));
+        if (ci < 0) { ok = false; msg = '未找到目标班级'; break; }
+        const target = roster.classes[ci];
+        target.students = students;
+        target.groups = [...new Set(students.map(x => x.group).filter(Boolean))];
+        target.absent = { date: '', names: [] };
+        this.saveRoster();
+        msg = `已导入「${target.name}」${students.length} 人`;
+        break;
+      }
       case 'addStudent': {
         if (!cls) { ok = false; msg = '无班级'; break; }
         const name = String(body.name || '').trim().slice(0, 20);
