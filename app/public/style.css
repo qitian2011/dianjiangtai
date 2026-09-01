@@ -352,7 +352,7 @@ label.switch input:checked::after { transform: translateX(19px); }
   content: ''; position: fixed; inset: 0; z-index: 3; pointer-events: none; opacity: .045;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-.screen .center { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 9vh 6vw 12vh; z-index: 1; }
+.screen .center { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 13vh 6vw 17vh; z-index: 1; }
 
 .screen .topbar {
   position: absolute; top: 16px; left: 26px; right: 26px; display: flex; justify-content: space-between; align-items: center;
@@ -386,7 +386,7 @@ label.switch input:checked::after { transform: translateX(19px); }
 .tt-table td input { width: 100%; min-width: 64px; border: none; background: transparent; color: var(--text); text-align: center; font-size: 14px; padding: 4px 0; outline: none; }
 .tt-table td input:focus { background: var(--card2); border-radius: 6px; }
 /* 大屏课表（待机页常驻，传统表格排版） */
-#standbyTt { width: fit-content; max-width: 94%; max-height: 74vh; overflow-y: auto; background: var(--glass); border: 1px solid var(--separator); border-radius: 3.4vmin; padding: 2.6vmin 3vmin; box-shadow: 0 2.5vmin 7vmin rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.07); backdrop-filter: blur(32px) saturate(1.7); -webkit-backdrop-filter: blur(32px) saturate(1.7); animation: fadeUp .5s cubic-bezier(.2,1,.4,1); }
+#standbyTt { width: fit-content; max-width: 94%; max-height: 62vh; overflow-y: auto; background: var(--glass); border: 1px solid var(--separator); border-radius: 3.4vmin; padding: 2.6vmin 3vmin; box-shadow: 0 2.5vmin 7vmin rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.07); backdrop-filter: blur(32px) saturate(1.7); -webkit-backdrop-filter: blur(32px) saturate(1.7); animation: fadeUp .5s cubic-bezier(.2,1,.4,1); }
 #standbyTt::-webkit-scrollbar { width: 4px; }
 #standbyTt::-webkit-scrollbar-thumb { background: rgba(127,127,127,.35); border-radius: 4px; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(1.6vmin); } to { opacity: 1; transform: translateY(0); } }
@@ -402,15 +402,15 @@ label.switch input:checked::after { transform: translateX(19px); }
 .screen .qr-corner svg { width: 13vmin; height: 13vmin; background: #fff; padding: .8vmin; border-radius: 1.6vmin; box-shadow: 0 1vmin 3vmin rgba(0,0,0,.35); }
 .screen .qr-corner-label { margin-top: .6vmin; font-size: 1.8vmin; color: var(--dim); padding: .3vmin 1.2vmin; border-radius: 999px; background: rgba(127,127,127,.14); }
 /* 公告栏：待机页左侧毛玻璃面板（长文可滚动） */
-.screen #standby { display: flex; flex-direction: column; align-items: center; width: 100%; }
-.screen .standby-row { display: flex; align-items: stretch; gap: 4vmin; width: 94%; max-width: 172vmin; }
-.screen .notice-panel { flex: 0 0 34vmin; min-width: 180px; max-width: 380px; max-height: 72vh; overflow-y: auto; text-align: left; background: var(--glass); border: 1px solid var(--separator); border-radius: 3vmin; padding: 2.6vmin 3vmin; backdrop-filter: blur(32px) saturate(1.7); -webkit-backdrop-filter: blur(32px) saturate(1.7); box-shadow: 0 2.5vmin 7vmin rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.07); animation: fadeUp .5s cubic-bezier(.2,1,.4,1); }
+.screen #standby { display: flex; flex-direction: column; align-items: center; width: 100%; height: 100%; min-height: 0; justify-content: center; }
+.screen .standby-row { display: flex; align-items: stretch; gap: 4vmin; width: 94%; max-width: 172vmin; max-height: 100%; min-height: 0; }
+.screen .notice-panel { flex: 0 0 34vmin; min-width: 180px; max-width: 380px; max-height: 58vh; overflow-y: auto; text-align: left; background: var(--glass); border: 1px solid var(--separator); border-radius: 3vmin; padding: 2.6vmin 3vmin; backdrop-filter: blur(32px) saturate(1.7); -webkit-backdrop-filter: blur(32px) saturate(1.7); box-shadow: 0 2.5vmin 7vmin rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.07); animation: fadeUp .5s cubic-bezier(.2,1,.4,1); }
 .screen .notice-panel::-webkit-scrollbar { width: 4px; }
 .screen .notice-panel::-webkit-scrollbar-thumb { background: rgba(127,127,127,.35); border-radius: 4px; }
 .screen .notice-panel .np-title { display: flex; align-items: center; gap: 1vmin; font-size: 2.8vmin; font-weight: 700; color: var(--text); margin-bottom: 1.6vmin; letter-spacing: .4vmin; }
 .screen .notice-panel .np-title .np-ico { width: 5vmin; height: 5vmin; display: inline-flex; align-items: center; justify-content: center; border-radius: 1.4vmin; background: linear-gradient(135deg, var(--accent), #5e5ce6); box-shadow: 0 .6vmin 2vmin rgba(10,132,255,.45); font-size: 2.8vmin; }
 .screen .notice-panel .np-body { font-size: 3.2vmin; line-height: 1.75; color: var(--text); white-space: pre-wrap; word-break: break-word; }
-.screen .tt-panel { flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; }
+.screen .tt-panel { flex: 1; display: flex; align-items: center; justify-content: center; min-width: 0; min-height: 0; }
 /* 传呼待处理堆叠（右下角，位于二维码上方） */
 .screen .page-stack { position: absolute; right: 3vmin; bottom: 21vmin; z-index: 25; display: flex; flex-direction: column; gap: 1vmin; align-items: flex-end; }
 .screen .ps-item { background: var(--glass); border: 1px solid var(--separator); border-radius: 1.8vmin; padding: 1.2vmin 2.2vmin; font-size: 2.6vmin; color: var(--text); backdrop-filter: blur(24px) saturate(1.6); -webkit-backdrop-filter: blur(24px) saturate(1.6); box-shadow: 0 1.4vmin 4vmin rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.06); max-width: 52vmin; animation: fadeUp .3s cubic-bezier(.2,1,.4,1); }
@@ -509,10 +509,11 @@ label.switch input:checked::after { transform: translateX(19px); }
 
 /* 小屏 / 竖屏：待机页内容垂直堆叠，防止公告栏过窄、课表被压 */
 @media (max-aspect-ratio: 4/3), (max-width: 900px) {
+  .screen .center { padding: 12vh 5vw 13vh; }
   .screen .standby-row { flex-direction: column; align-items: center; gap: 3vmin; }
-  .screen .notice-panel { flex: 0 0 auto; width: 100%; max-width: 100%; max-height: 28vh; }
+  .screen .notice-panel { flex: 0 0 auto; width: 100%; max-width: 100%; max-height: 24vh; }
   .screen .tt-panel { width: 100%; }
-  #standbyTt { max-height: 46vh; width: 100%; max-width: 100%; }
+  #standbyTt { max-height: 40vh; width: 100%; max-width: 100%; }
 }
 
 ::-webkit-scrollbar { width: 5px; }
