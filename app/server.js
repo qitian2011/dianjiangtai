@@ -117,7 +117,8 @@ function getRoom(id) {
     const idx = roster.classes.findIndex(c => c.rid === id);
     const p = (idx >= 0 && roster.classes[idx].prefs) || {};
     rooms.set(id, {
-      currentClass: idx >= 0 ? idx : 0,
+      // room 是班级 rid 时绑定该班级；否则沿用全局当前班（与重启前行为一致）
+      currentClass: idx >= 0 ? idx : Math.min(roster.currentClass || 0, roster.classes.length - 1),
       pickedThisRound: [],   // 本轮已点名单（不复读机用）
       lastPick: null,        // {names:[...], at}
       answering: null,       // {name, deadline, duration}
