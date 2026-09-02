@@ -150,9 +150,19 @@ function saveClassPrefs(roomId, room) {
     saveRoster();
   }
 }
+// 该房间当前班是否处于锁定态（按 sid 隔离：sid 未解锁就算锁定，sid 为空的旧客户端一律视为锁定）
+function isLocked(roomId, sid) {
+  const room = getRoom(roomId);
+  const cls = roster.classes[roomClassIndex(roomId, room)];
+  return !!(cls && cls.pass && !(sid && room.unlocked[sid + ':' + cls.rid]));
+}
 function broadcast(roomId, event) {
   const payload = `data: ${JSON.stringify(event)}\n\n`;
-  for (const c of sseClients) { if (c.room === roomId) { try { c.res.write(payload); } catch (e) { sseClients.delete(c); } } }
+  for (const c of sseClients) {
+    if (c.room !== roomId) continue;
+    if (isLocked(c.room, c.sid)) continue;   // 锁定中的连接不推事件数据（防名单/记录泄露）
+    try { c.res.write(payload); } catch (e) { sseClients.delete(c); }
+  }
 }
 function lanIPs() {
   const out = [];
@@ -160,16 +170,22 @@ function lanIPs() {
   for (const k of Object.keys(nets)) for (const n of nets[k]) if (n.family === 'IPv4' && !n.internal) out.push(n.address);
   return out;
 }
-function pushState(roomId) { broadcast(roomId, { event: 'state', state: snapshot(roomId) }); }
-function snapshot(roomId) {
+function pushState(roomId) {
+  for (const c of sseClients) {
+    if (c.room !== roomId) continue;
+    try { c.res.write(`data: ${JSON.stringify({ event: 'state', state: snapshot(c.room, c.sid) })}\n\n`); }
+    catch (e) { sseClients.delete(c); }
+  }
+}
+function snapshot(roomId, sid = '') {
   const room = getRoom(roomId);
   const cls = roster.classes[roomClassIndex(roomId, room)] || { name: '', students: [] };
   const allClasses = roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass }));
   const curIdx = roomClassIndex(roomId, room);
   const dirIdx = allClasses.findIndex(c => c.i === curIdx);
   const currentClass = dirIdx >= 0 ? allClasses[dirIdx].i : curIdx;
-  // 班级密码门禁：未解锁时只回最小信息（名单/记录一概不给），前端弹密码框
-  if (cls.pass && !room.unlocked[cls.rid]) {
+  // 班级密码门禁：本标签页未解锁时只回最小信息（名单/记录一概不给），前端弹密码框
+  if (isLocked(roomId, sid)) {
     return {
       locked: true, room: roomId, className: cls.name,
       allClasses, currentClass, places: roster.places
@@ -239,11 +255,11 @@ function pickStudents(roomId, { group = null, count = 1, noRepeat = true } = {})
 }
 
 /* ---------------- 指令处理 ---------------- */
-function handleCmd(body, res, roomId) {
+function handleCmd(body, res, roomId, sid = '') {
   const session = getRoom(roomId);
   const cls = roster.classes[roomClassIndex(roomId, session)];
-  // 班级密码门禁：未解锁时只放行 unlockClass，其余指令一律拒绝
-  if (cls && cls.pass && !session.unlocked[cls.rid] && body.action !== 'unlockClass') {
+  // 班级密码门禁：本标签页未解锁时只放行 unlockClass，其余指令一律拒绝
+  if (cls && cls.pass && !session.unlocked[sid + ':' + cls.rid] && body.action !== 'unlockClass') {
     res.end(JSON.stringify({ ok: false, msg: '需要班级密码' }));
     return;
   }
@@ -432,7 +448,7 @@ function handleCmd(body, res, roomId) {
       if (cls.pass && old !== cls.pass) { ok = false; msg = '原密码不正确'; break; }
       const pass = String(body.pass || '').trim().slice(0, 20);
       cls.pass = pass || '';
-      rooms.forEach(r => { delete r.unlocked[cls.rid]; });   // 改密后旧解锁全部失效
+      rooms.forEach(r => { r.unlocked = {}; });   // 改密后所有标签页的解锁全部失效
       saveRoster();
       msg = pass ? '班级密码已设置' : '班级密码已移除';
       break;
@@ -449,11 +465,11 @@ function handleCmd(body, res, roomId) {
       if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
       const target = roster.classes[i];
       // 有密码的班级：需输入密码（本会话解锁过则免）
-      if (target.pass && !session.unlocked[target.rid] && String(body.pass || '') !== target.pass) {
+      if (target.pass && !session.unlocked[sid + ':' + target.rid] && String(body.pass || '') !== target.pass) {
         ok = false; msg = '需要班级密码'; break;
       }
       session.currentClass = i; roster.currentClass = i;
-      if (target.pass) session.unlocked[target.rid] = true;
+      if (target.pass) session.unlocked[sid + ':' + target.rid] = true;
       saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null;
       break;
     }
@@ -469,7 +485,7 @@ function handleCmd(body, res, roomId) {
       const pass = String(body.pass || '').trim().slice(0, 20);
       roster.classes.push({ name, rid: genRid(name, roster.classes.length), groups: [], students: [], absent: { date: '', names: [] }, pass });
       roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
-      if (pass) session.unlocked[roster.classes[roster.currentClass].rid] = true;
+      if (pass) session.unlocked[sid + ':' + roster.classes[roster.currentClass].rid] = true;
       session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
       saveRoster();
       msg = pass ? `已创建班级「${name}」（已设置密码）` : `已创建班级「${name}」`;
@@ -487,7 +503,10 @@ function handleCmd(body, res, roomId) {
       const nm = roster.classes[i].name, delRid = roster.classes[i].rid;
       roster.classes.splice(i, 1);
       if (roster.currentClass >= roster.classes.length) roster.currentClass = roster.classes.length - 1;
-      rooms.forEach(r => { if (r.currentClass >= roster.classes.length) r.currentClass = roster.classes.length - 1; delete r.unlocked[delRid]; });
+      rooms.forEach(r => {
+        if (r.currentClass >= roster.classes.length) r.currentClass = roster.classes.length - 1;
+        for (const k of Object.keys(r.unlocked)) if (k.endsWith(':' + delRid)) delete r.unlocked[k];
+      });
       session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
       saveRoster();
       msg = `已删除班级「${nm}」`;
@@ -628,7 +647,7 @@ function handleCmd(body, res, roomId) {
     case 'unlockClass': {
       if (!cls) { ok = false; msg = '无班级'; break; }
       if (!cls.pass) break;   // 未加密班级无需解锁
-      if (String(body.pass || '') === cls.pass) { session.unlocked[cls.rid] = true; msg = '已解锁'; }
+      if (String(body.pass || '') === cls.pass) { session.unlocked[sid + ':' + cls.rid] = true; msg = '已解锁'; }
       else { ok = false; msg = '密码不正确'; }
       break;
     }
@@ -681,21 +700,22 @@ function readBody(req) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const roomId = url.searchParams.get('room') || '1';
+  const sid = String(url.searchParams.get('sid') || '');   // 浏览器标签页会话 id：解锁态按标签页隔离
   if (url.pathname === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'Access-Control-Allow-Origin': '*' });
-    res.write(`data: ${JSON.stringify({ event: 'state', state: snapshot(roomId) })}\n\n`);
-    const client = { res, room: roomId };
+    res.write(`data: ${JSON.stringify({ event: 'state', state: snapshot(roomId, sid) })}\n\n`);
+    const client = { res, room: roomId, sid };
     sseClients.add(client);
     req.on('close', () => sseClients.delete(client));
     return;
   }
   if (url.pathname === '/api/cmd' && req.method === 'POST') {
     const body = await readBody(req);
-    return handleCmd(body, res, roomId);
+    return handleCmd(body, res, roomId, sid);
   }
   if (url.pathname === '/api/state') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-    return res.end(JSON.stringify(snapshot(roomId)));
+    return res.end(JSON.stringify(snapshot(roomId, sid)));
   }
   // 静态文件
   let p = url.pathname === '/' ? '/screen.html' : url.pathname;
