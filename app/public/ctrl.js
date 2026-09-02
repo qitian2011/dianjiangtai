@@ -155,6 +155,8 @@ function render() {
   syncChips('themeChips', 't', (window.__getTheme ? __getTheme() : 'auto'));
   // 大屏课表显示开关
   $('showTtChk').checked = S.showTt !== false;
+  // 大屏作业栏（备忘录）显示开关
+  $('showMemosChk').checked = !!S.showMemos;
 }
 
 function syncChips(containerId, attr, val) {
@@ -359,6 +361,8 @@ $('ttTimes').addEventListener('change', e => {
 });
 /* 大屏课表显示/隐藏（按班级保存） */
 $('showTtChk').onchange = () => cmd({ action: 'setShowTt', on: $('showTtChk').checked });
+/* 大屏作业栏（备忘录）显示/隐藏（按班级保存） */
+$('showMemosChk').onchange = () => cmd({ action: 'setShowMemos', on: $('showMemosChk').checked });
 /* 公告栏：发布/清除（按班级保存，大屏待机页常驻） */
 $('noticeSaveBtn').onclick = () => cmd({ action: 'setNotice', text: $('noticeText').value.trim() });
 $('noticeClearBtn').onclick = () => { if (confirm('确定清除当前公告？')) cmd({ action: 'setNotice', text: '' }); };
