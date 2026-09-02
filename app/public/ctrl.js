@@ -7,9 +7,11 @@ const $ = id => document.getElementById(id);
 
 /* ---------- 工具 ---------- */
 const ROOM = new URLSearchParams(location.search).get('room') || '1';
+// 标签页会话 id：解锁态按标签页隔离（sessionStorage 关标签即清）——新开页面/新设备打开加密班级 URL 必弹密码框
+const SID = (() => { let s = sessionStorage.getItem('djSid'); if (!s) { s = 's' + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('djSid', s); } return s; })();
 async function cmd(body) {
   const pin = localStorage.getItem('djPin') || '';
-  const r = await fetch(`/api/cmd?room=${ROOM}&pin=${encodeURIComponent(pin)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(`/api/cmd?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (r.status === 401) {
     const p = prompt('请输入访问密码');
     if (p !== null) { localStorage.setItem('djPin', p); return cmd(body); }
@@ -28,14 +30,14 @@ let roomNormalized = false;   // 打开时无 room 参数 → 自动跳到当前
 async function initSSE() {
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
   // 服务器未设密码（PIN 为空）时直接放行；设了密码且未通过则弹一次，取消就不再反复弹
-  const r0 = await fetch(`/api/state?room=${ROOM}&pin=${encodeURIComponent(pin)}`).catch(() => null);
+  const r0 = await fetch(`/api/state?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`).catch(() => null);
   if (r0 && r0.status === 401) {
     const p = prompt('请输入访问密码');
     if (p !== null) { pin = p; localStorage.setItem('djPin', p); }
   }
   // 房间不存在/已失效（如班级被删除）：回首页自愈
   if (r0 && r0.status === 404) { location.replace(location.pathname); return; }
-  es = new EventSource(`/events?room=${ROOM}&pin=${encodeURIComponent(pin)}`);
+  es = new EventSource(`/events?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`);
   // 8 秒内没收到状态 → 提示（网址错/被墙/密码错/断网）
   setTimeout(() => {
     if (!initSSE._gotState) {
