@@ -115,6 +115,8 @@ async function initSSE() {
     const p = prompt('请输入访问密码');
     if (p !== null) { pin = p; localStorage.setItem('djPin', p); }
   }
+  // 房间不存在/已失效（如班级被删除）：回首页自愈
+  if (r0 && r0.status === 404) { location.replace(location.pathname); return; }
   es = new EventSource(`/events?room=${ROOM}&pin=${encodeURIComponent(pin)}`);
   // 6 秒内没收到任何状态 → 显示连接失败提示（网址错/被墙/密码错/断网）
   setTimeout(() => { if (!initSSE._gotState) { const el = $('connError'); if (el) el.style.display = ''; } }, 6000);
@@ -145,6 +147,28 @@ async function initSSE() {
 initSSE();
 
 /* ---------- 大屏班级切换（有密码的班级需输入密码） ---------- */
+/* ---------- 班级密码锁定画面 ---------- */
+let classLockAutoTried = false;
+function lockRid() {
+  const c = (S.allClasses || []).find(x => x.i === S.currentClass);
+  return (c && c.rid) || ROOM;
+}
+function showClassLock() {
+  $('classLock').style.display = '';
+  $('classLockName').textContent = S.className || '本班级';
+  $('className').textContent = S.className || '—';
+  const saved = sessionStorage.getItem('djUnlock:' + lockRid());
+  if (saved && !classLockAutoTried) { classLockAutoTried = true; doClassUnlock(saved); return; }
+}
+async function doClassUnlock(pass) {
+  if (!pass) { $('classLockMsg').textContent = '请输入密码'; return; }
+  const j = await apiCmd({ action: 'unlockClass', pass });
+  if (j.ok) { sessionStorage.setItem('djUnlock:' + lockRid(), pass); $('classLockPass').value = ''; }
+  else { $('classLockMsg').textContent = j.msg || '密码不正确'; }
+}
+$('classLockBtn').onclick = () => doClassUnlock($('classLockPass').value.trim());
+$('classLockPass').addEventListener('keydown', e => { if (e.key === 'Enter') doClassUnlock($('classLockPass').value.trim()); });
+
 function showMsg(t) {
   const el = $('screenToast');
   el.textContent = t; el.style.display = 'block';
@@ -180,6 +204,7 @@ $('classOverlay').addEventListener('click', async e => {
     if (!pass) { toggleClassPicker(false); return; }
     const j = await apiCmd({ action: 'classSwitch', index: i, pass });
     if (!j.ok) { toggleClassPicker(false); if (j && j.msg) showMsg(j.msg); return; }
+    sessionStorage.setItem('djUnlock:' + target.rid, pass);   // 新页面自动解锁，免二次输入
   }
   toggleClassPicker(false);
   location.href = location.pathname + '?room=' + encodeURIComponent(target.rid);
@@ -352,6 +377,9 @@ let lastPageKey = '';
 let lastPageSoundAt = 0;
 function render() {
   if (!S) return;
+  // 班级密码锁定：显示锁定画面（可在此输密码，或等待控制端解锁）
+  if (S.locked) { showClassLock(); return; }
+  if ($('classLock').style.display !== 'none') { $('classLock').style.display = 'none'; $('classLockMsg').textContent = ''; }
   // 答题结束后清理倒计时定时器（防止 tick 访问 null.answering 抛错）
   if (!S.answering && render._cdTimer) { clearInterval(render._cdTimer); render._cdTimer = null; }
   volume = S.volume; $('className').textContent = S.className;
