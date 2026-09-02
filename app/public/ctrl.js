@@ -33,6 +33,8 @@ async function initSSE() {
     const p = prompt('请输入访问密码');
     if (p !== null) { pin = p; localStorage.setItem('djPin', p); }
   }
+  // 房间不存在/已失效（如班级被删除）：回首页自愈
+  if (r0 && r0.status === 404) { location.replace(location.pathname); return; }
   es = new EventSource(`/events?room=${ROOM}&pin=${encodeURIComponent(pin)}`);
   // 8 秒内没收到状态 → 提示（网址错/被墙/密码错/断网）
   setTimeout(() => {
@@ -67,6 +69,9 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
 /* ---------- 渲染 ---------- */
 function render() {
   if (!S) return;
+  // 班级密码锁定：只显示解锁弹窗，其余 UI 一概不渲染
+  if (S.locked) { showLock(); return; }
+  hideLock();
   // 班级选择
   $('classSel').innerHTML = S.allClasses.map(c => `<option value="${c.i}" ${c.i === S.currentClass ? 'selected' : ''}>${c.locked ? '🔒 ' : ''}${c.name}</option>`).join('');
   // 分组chips（组由名单页自定义，无组时只显示"全班"）
@@ -130,6 +135,10 @@ function render() {
   renderTt();
   // 公告栏（输入中不被状态刷新覆盖）
   if (document.activeElement !== $('noticeText')) $('noticeText').value = (S.notice && S.notice.text) || '';
+  // 备忘录（输入中不被状态刷新覆盖）
+  $('memoList').innerHTML = (S.memos || []).length
+    ? S.memos.map(m => `<li style="${m.done ? 'opacity:.55' : ''}"><b style="${m.done ? 'text-decoration:line-through' : ''}">${esc(m.text)}</b><span>${timeStr(m.at)} <input type="checkbox" ${m.done ? 'checked' : ''} data-mt="${m.id}" title="已完成"><span class="del" data-md="${m.id}" style="cursor:pointer; color:var(--red)">×</span></span></li>`).join('')
+    : '<li>暂无备忘</li>';
   // 考试模式
   $('examChk').checked = S.examMode;
   // 班级密码状态
@@ -149,6 +158,35 @@ function render() {
 function syncChips(containerId, attr, val) {
   document.querySelectorAll(`#${containerId} .chip`).forEach(c => c.classList.toggle('sel', c.dataset[attr] === val));
 }
+
+/* ---------- 班级密码锁定（直接打开加密班级 URL 时弹出） ---------- */
+let lockAutoTried = false;   // sessionStorage 里的历史密码只自动试一次，避免死循环
+function lockRid() {
+  const c = (S.allClasses || []).find(x => x.i === S.currentClass);
+  return (c && c.rid) || ROOM;
+}
+function showLock() {
+  $('lockOverlay').style.display = '';
+  $('lockClassName').textContent = S.className || '本班级';
+  const saved = sessionStorage.getItem('djUnlock:' + lockRid());
+  if (saved && !lockAutoTried) { lockAutoTried = true; doUnlock(saved); return; }
+  setTimeout(() => $('lockPass').focus(), 100);
+}
+function hideLock() { $('lockOverlay').style.display = 'none'; $('lockMsg').textContent = ''; }
+async function doUnlock(pass) {
+  if (!pass) { $('lockMsg').textContent = '请输入密码'; return; }
+  const j = await cmd({ action: 'unlockClass', pass });
+  if (j.ok) {
+    sessionStorage.setItem('djUnlock:' + lockRid(), pass);
+    $('lockMsg').textContent = '';
+    $('lockPass').value = '';
+  } else {
+    $('lockMsg').textContent = j.msg || '密码不正确';
+  }
+}
+$('lockBtn').onclick = () => doUnlock($('lockPass').value.trim());
+$('lockPass').addEventListener('keydown', e => { if (e.key === 'Enter') doUnlock($('lockPass').value.trim()); });
+$('lockSwitchBtn').onclick = () => { location.href = location.pathname; };   // 回首页自动进当前班级（未加密的话）
 
 /* ---------- 点名答题事件 ---------- */
 $('groupChips').addEventListener('click', e => { if (e.target.dataset.g !== undefined) { selGroup = e.target.dataset.g || null; render(); } });
@@ -322,6 +360,17 @@ $('showTtChk').onchange = () => cmd({ action: 'setShowTt', on: $('showTtChk').ch
 /* 公告栏：发布/清除（按班级保存，大屏待机页常驻） */
 $('noticeSaveBtn').onclick = () => cmd({ action: 'setNotice', text: $('noticeText').value.trim() });
 $('noticeClearBtn').onclick = () => { if (confirm('确定清除当前公告？')) cmd({ action: 'setNotice', text: '' }); };
+/* 备忘录：添加 / 勾选完成 / 删除 / 清除已完成（按班级保存） */
+$('memoAddBtn').onclick = () => {
+  const v = $('memoInput').value.trim();
+  if (!v) return toast('先写点内容再添加');
+  cmd({ action: 'memoAdd', text: v });
+  $('memoInput').value = '';
+};
+$('memoInput').addEventListener('keydown', e => { if (e.key === 'Enter') $('memoAddBtn').click(); });
+$('memoList').addEventListener('change', e => { if (e.target.dataset.mt) cmd({ action: 'memoToggle', id: e.target.dataset.mt }); });
+$('memoList').addEventListener('click', e => { if (e.target.dataset.md) cmd({ action: 'memoDel', id: e.target.dataset.md }); });
+$('memoClearDoneBtn').onclick = () => cmd({ action: 'memoClearDone' });
 /* 班级密码：设置/修改/移除（改密需原密码，移除需原密码） */
 $('setClassPassBtn').onclick = async () => {
   const cur = (S.allClasses || []).find(c => c.i === S.currentClass);
@@ -352,6 +401,7 @@ $('classSel').onchange = async e => {
     if (!pass) { render(); return; }
     const j = await cmd({ action: 'classSwitch', index: i, pass });
     if (!j.ok) { render(); return; }
+    sessionStorage.setItem('djUnlock:' + target.rid, pass);   // 新页面自动解锁，免二次输入
   }
   location.href = location.pathname + '?room=' + encodeURIComponent(target.rid);
 };
@@ -371,6 +421,8 @@ $('delClassBtn').onclick = async () => {
     pass = prompt(`班级「${cur}」已加密，删除需要输入密码：`, '') || '';
   }
   await cmd({ action: 'delClass', index: S.currentClass, confirm: true, pass });
+  // 删除后离开当前（已失效的）班级房间，回首页自动进剩余班级
+  location.href = location.pathname;
 };
 $('renameClassBtn').onclick = () => {
   const cur = S ? S.className : '';
