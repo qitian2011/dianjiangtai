@@ -106,18 +106,20 @@ function voiceModeAllowsAI() { return S && (S.voiceMode === 'ai' || S.voiceMode 
 /* ---------- SSE（携带访问密码，?room=X 指定房间，同房间两端联动） ---------- */
 let es = null;
 const ROOM = new URLSearchParams(location.search).get('room') || '1';
+// 标签页会话 id：解锁态按标签页隔离（sessionStorage 关标签即清）——新开页面/新设备打开加密班级 URL 必弹密码框
+const SID = (() => { let s = sessionStorage.getItem('djSid'); if (!s) { s = 's' + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('djSid', s); } return s; })();
 let roomNormalized = false;   // 打开时无 room 参数 → 自动跳到当前班级专属链接（只跳一次）
 async function initSSE() {
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
   // 服务器未设密码（PIN 为空）时直接放行；设了密码且未通过则弹一次，取消就不再反复弹
-  const r0 = await fetch(`/api/state?room=${ROOM}&pin=${encodeURIComponent(pin)}`).catch(() => null);
+  const r0 = await fetch(`/api/state?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`).catch(() => null);
   if (r0 && r0.status === 401) {
     const p = prompt('请输入访问密码');
     if (p !== null) { pin = p; localStorage.setItem('djPin', p); }
   }
   // 房间不存在/已失效（如班级被删除）：回首页自愈
   if (r0 && r0.status === 404) { location.replace(location.pathname); return; }
-  es = new EventSource(`/events?room=${ROOM}&pin=${encodeURIComponent(pin)}`);
+  es = new EventSource(`/events?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`);
   // 6 秒内没收到任何状态 → 显示连接失败提示（网址错/被墙/密码错/断网）
   setTimeout(() => { if (!initSSE._gotState) { const el = $('connError'); if (el) el.style.display = ''; } }, 6000);
   es.onmessage = (e) => {
@@ -176,7 +178,7 @@ function showMsg(t) {
 }
 async function apiCmd(body) {
   let pin = localStorage.getItem('djPin') || new URLSearchParams(location.search).get('pin') || '';
-  const r = await fetch(`/api/cmd?room=${ROOM}&pin=${encodeURIComponent(pin)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(`/api/cmd?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (r.status === 401) { pin = prompt('请输入访问密码') || ''; localStorage.setItem('djPin', pin); return apiCmd(body); }
   return r.json().catch(() => ({}));
 }
