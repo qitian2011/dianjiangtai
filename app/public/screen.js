@@ -390,6 +390,19 @@ function render() {
   const notice = S.notice && S.notice.text ? S.notice.text : '';
   if (notice) { $('noticePanel').style.display = ''; $('noticeTextEl').textContent = notice; }
   else $('noticePanel').style.display = 'none';
+  // 作业栏（备忘录）：控制端开关 showMemos 开启时，待机页常驻显示未完成条目，勾掉即下屏
+  const memos = (S.memos || []).filter(m => !m.done);
+  const memoPanel = $('memoPanel'), memoBody = $('memoBodyEl');
+  if (S.showMemos && memos.length) {
+    memoBody.textContent = '';
+    memos.forEach(m => {
+      const div = document.createElement('div');
+      div.className = 'memo-line';
+      div.textContent = m.text;
+      memoBody.appendChild(div);
+    });
+    memoPanel.style.display = '';
+  } else { memoPanel.style.display = 'none'; memoBody.textContent = ''; }
   // 传呼待处理堆叠：右下角累积未点"已到"的传呼
   const pend = (S.pageLog || []).filter(p => !p.confirmed && !p.retracted);
   const stackEl = $('pageStack');
