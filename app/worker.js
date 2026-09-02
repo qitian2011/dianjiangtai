@@ -225,7 +225,13 @@ export class Room {
     if (!cls || !cls.absent || cls.absent.date !== todayStr()) return [];
     return cls.absent.names.filter(n => cls.students.some(s => s.name === n));
   }
-  snapshot(roomId) {
+  // 该房间当前班是否处于锁定态（按 sid 隔离：sid 未解锁就算锁定，sid 为空的旧客户端一律视为锁定）
+  isLocked(roomId, sid) {
+    const room = this.getRoom(roomId);
+    const cls = this.roster.classes[this.roomClassIndex(roomId, room)];
+    return !!(cls && cls.pass && !(sid && room.unlocked[sid + ':' + cls.rid]));
+  }
+  snapshot(roomId, sid = '') {
     const room = this.getRoom(roomId);
     const cls = this.roster.classes[this.roomClassIndex(roomId, room)] || { name: '', students: [] };
     // 班级目录：主实例实时生成；班级实例用缓存目录（i = 主实例中的下标，前端切班用）
@@ -235,8 +241,8 @@ export class Room {
     const curIdx = this.roomClassIndex(roomId, room);
     const dirIdx = allClasses.findIndex(c => this.mode === 'class' ? c.rid === roomId : c.i === curIdx);
     const currentClass = dirIdx >= 0 ? allClasses[dirIdx].i : curIdx;
-    // 班级密码门禁：未解锁时只回最小信息（名单/记录一概不给），前端弹密码框
-    if (cls.pass && !room.unlocked[cls.rid]) {
+    // 班级密码门禁：本标签页未解锁时只回最小信息（名单/记录一概不给），前端弹密码框
+    if (this.isLocked(roomId, sid)) {
       return {
         locked: true, room: roomId, className: cls.name,
         allClasses, currentClass, places: this.roster.places
@@ -274,14 +280,24 @@ export class Room {
   }
   broadcast(roomId, event) {
     const payload = `data: ${JSON.stringify(event)}\n\n`;
-    for (const w of this.sse) { if (w.room === roomId) { try { w.push(payload); } catch (e) { this.sse.delete(w); } } }
+    for (const w of this.sse) {
+      if (w.room !== roomId) continue;
+      if (this.isLocked(w.room, w.sid)) continue;   // 锁定中的连接不推事件数据（防名单/记录泄露）
+      try { w.push(payload); } catch (e) { this.sse.delete(w); }
+    }
   }
-  pushState(roomId) { this.broadcast(roomId, { event: 'state', state: this.snapshot(roomId) }); }
+  pushState(roomId) {
+    for (const w of this.sse) {
+      if (w.room !== roomId) continue;
+      try { w.push(`data: ${JSON.stringify({ event: 'state', state: this.snapshot(w.room, w.sid) })}\n\n`); }
+      catch (e) { this.sse.delete(w); }
+    }
+  }
   ensureHeartbeat() {
     if (this.hb) return;
     this.hb = setInterval(() => { if (this.sse.size) this.raw(': ping\n\n'); }, 25000);
   }
-  sseResponse(roomId) {
+  sseResponse(roomId, sid = '') {
     this.ensureHeartbeat();
     const enc = new TextEncoder();
     let entry = null;
@@ -290,10 +306,11 @@ export class Room {
         entry = {
           push: (s) => ctrl.enqueue(enc.encode(s)),
           close: () => { try { ctrl.close(); } catch (e) {} },
-          room: roomId
+          room: roomId,
+          sid
         };
         this.sse.add(entry);
-        ctrl.enqueue(enc.encode(`data: ${JSON.stringify({ event: 'state', state: this.snapshot(roomId) })}\n\n`));
+        ctrl.enqueue(enc.encode(`data: ${JSON.stringify({ event: 'state', state: this.snapshot(roomId, sid) })}\n\n`));
       },
       cancel: () => { if (entry) this.sse.delete(entry); }
     });
@@ -343,15 +360,15 @@ export class Room {
   /* ---------------- 指令处理 ---------------- */
   // 班级列表管理类指令：班级实例转发主实例（班级名单唯一权威在主实例）
   static PROXY_TO_MAIN = ['classSwitch', 'addClass', 'delClass', 'importRoster', 'addPlace'];
-  async handleCmd(body, roomId, opts = {}) {
+  async handleCmd(body, roomId, sid = '', opts = {}) {
     await this.ready;
     if (this.mode === 'class' && Room.PROXY_TO_MAIN.includes(body.action)) return this.proxyCmd(body);
     const roster = this.roster, session = this.getRoom(roomId);
     const cls = roster.classes[this.roomClassIndex(roomId, session)];
-    // 班级密码门禁：未解锁时只放行 unlockClass，其余指令一律拒绝。
+    // 班级密码门禁：本标签页未解锁时只放行 unlockClass，其余指令一律拒绝。
     // 主实例内部转发通道(internal/proxy-cmd)跳过外层房间门禁——班级实例自身已做同等级校验，
     // 否则 room '1' 当前班的锁定态会误拦其他班级页转发来的管理指令。
-    if (!opts.skipGate && cls && cls.pass && !session.unlocked[cls.rid] && body.action !== 'unlockClass') {
+    if (!opts.skipGate && cls && cls.pass && !session.unlocked[sid + ':' + cls.rid] && body.action !== 'unlockClass') {
       return json({ ok: false, msg: '需要班级密码' });
     }
     const find = (name) => cls && cls.students.find(x => x.name === name);
@@ -534,7 +551,7 @@ export class Room {
       if (cls.pass && old !== cls.pass) { ok = false; msg = '原密码不正确'; break; }
       const pass = String(body.pass || '').trim().slice(0, 20);
       cls.pass = pass || '';
-      this.rooms.forEach(r => { delete r.unlocked[cls.rid]; });   // 改密后旧解锁全部失效
+      this.rooms.forEach(r => { r.unlocked = {}; });   // 改密后所有标签页的解锁全部失效
       if (this.mode === 'class') { const d = (this.dir || []).find(x => x.rid === cls.rid); if (d) d.locked = !!cls.pass; }
       this.saveRoster();
       msg = pass ? '班级密码已设置' : '班级密码已移除';
@@ -551,11 +568,11 @@ export class Room {
         const i = body.index | 0;
         if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
         const target = roster.classes[i];
-        if (target.pass && !session.unlocked[target.rid] && String(body.pass || '') !== target.pass) {
+        if (target.pass && !session.unlocked[sid + ':' + target.rid] && String(body.pass || '') !== target.pass) {
           ok = false; msg = '需要班级密码'; break;
         }
         session.currentClass = i; roster.currentClass = i;
-        if (target.pass) session.unlocked[target.rid] = true;
+        if (target.pass) session.unlocked[sid + ':' + target.rid] = true;
         this.saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null;
         break;
       }
@@ -571,7 +588,7 @@ export class Room {
         const pass = String(body.pass || '').trim().slice(0, 20);
         roster.classes.push({ name, rid: this.genRid(name, roster.classes.length), groups: [], students: [], absent: { date: '', names: [] }, pass });
         roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
-        if (pass) session.unlocked[roster.classes[roster.currentClass].rid] = true;
+        if (pass) session.unlocked[sid + ':' + roster.classes[roster.currentClass].rid] = true;
         session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
         this.saveRoster();
         msg = pass ? `已创建班级「${name}」（已设置密码）` : `已创建班级「${name}」`;
@@ -588,7 +605,10 @@ export class Room {
         const nm = roster.classes[i].name, delRid = roster.classes[i].rid;
         roster.classes.splice(i, 1);
         if (roster.currentClass >= roster.classes.length) roster.currentClass = roster.classes.length - 1;
-        this.rooms.forEach(r => { if (r.currentClass >= roster.classes.length) r.currentClass = roster.classes.length - 1; delete r.unlocked[delRid]; });
+        this.rooms.forEach(r => {
+          if (r.currentClass >= roster.classes.length) r.currentClass = roster.classes.length - 1;
+          for (const k of Object.keys(r.unlocked)) if (k.endsWith(':' + delRid)) delete r.unlocked[k];
+        });
         session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
         this.saveRoster();
         msg = `已删除班级「${nm}」`;
@@ -729,7 +749,7 @@ export class Room {
       case 'unlockClass': {
         if (!cls) { ok = false; msg = '无班级'; break; }
         if (!cls.pass) break;   // 未加密班级无需解锁
-        if (String(body.pass || '') === cls.pass) { session.unlocked[cls.rid] = true; msg = '已解锁'; }
+        if (String(body.pass || '') === cls.pass) { session.unlocked[sid + ':' + cls.rid] = true; msg = '已解锁'; }
         else { ok = false; msg = '密码不正确'; }
         break;
       }
@@ -774,6 +794,7 @@ export class Room {
     const url = new URL(req.url);
     this.origin = url.origin;
     const roomId = url.searchParams.get('room') || '1';
+    const sid = String(url.searchParams.get('sid') || '');   // 浏览器标签页会话 id：解锁态按标签页隔离，新开页面必重新输密码
     // 失效班级实例（rid 在主实例中不存在）：返回 404，前端自动回退首页
     if (this.invalid) return json({ ok: false, msg: '房间不存在或已失效' }, 404);
     // 主实例内部端点（仅 DO 间通过 service binding 调用；Worker 入口不转发 /internal/*，公网不可达）
@@ -804,13 +825,13 @@ export class Room {
     //（班级实例侧已做过同等级门禁；classSwitch/delClass 等指令内部仍校验目标班密码）
     if (this.mode === 'main' && url.pathname === '/internal/proxy-cmd' && req.method === 'POST') {
       const body = await req.json().catch(() => ({}));
-      return this.handleCmd(body, '1', { skipGate: true });
+      return this.handleCmd(body, '1', '', { skipGate: true });
     }
-    if (url.pathname === '/events') return this.sseResponse(roomId);
-    if (url.pathname === '/api/state') return json(this.snapshot(roomId));
+    if (url.pathname === '/events') return this.sseResponse(roomId, sid);
+    if (url.pathname === '/api/state') return json(this.snapshot(roomId, sid));
     if (url.pathname === '/api/cmd' && req.method === 'POST') {
       const body = await req.json().catch(() => ({}));
-      return this.handleCmd(body, roomId);
+      return this.handleCmd(body, roomId, sid);
     }
     return json({ ok: false, msg: 'Not Found' }, 404);
   }
