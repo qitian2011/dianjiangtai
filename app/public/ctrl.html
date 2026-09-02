@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=28">
-<script src="theme.js?v=28"></script>
+<link rel="stylesheet" href="style.css?v=29">
+<script src="theme.js?v=29"></script>
 </head>
 <body>
 <div class="ctrl-wrap">
@@ -162,6 +162,18 @@
       </div>
     </div>
     <div class="card">
+      <h3>📝 备忘录（待办 / 课堂笔记，按班级保存）</h3>
+      <div class="row">
+        <input type="text" id="memoInput" maxlength="200" placeholder="记点什么…（如：周五收研学回执）" style="flex:1">
+        <button class="btn small primary" id="memoAddBtn">添加</button>
+      </div>
+      <ul class="history" id="memoList" style="margin-top:8px"><li>暂无</li></ul>
+      <div class="row" style="margin-top:6px">
+        <button class="btn small" id="memoClearDoneBtn">清除已完成</button>
+        <span style="font-size:12px; color:var(--dim)">勾选=已完成，×=删除，最长 200 字/条</span>
+      </div>
+    </div>
+    <div class="card">
       <h3>节次设置</h3>
       <div class="row" style="align-items:center; gap:8px">
         <span>上午</span>
@@ -269,7 +281,19 @@
     </div>
   </div>
 </div>
+<!-- 班级密码锁定屏（直接打开加密班级 URL 时出现） -->
+<div class="modal-overlay" id="lockOverlay" style="display:none">
+  <div class="modal-card">
+    <div class="modal-label">🔒 <span id="lockClassName"></span> 已加密</div>
+    <input type="text" id="lockPass" placeholder="输入班级密码" style="width:100%; margin:12px 0; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); font-size:16px">
+    <div class="modal-actions">
+      <button class="btn primary big" id="lockBtn">🔓 解锁</button>
+      <button class="btn" id="lockSwitchBtn">切换其他班级</button>
+    </div>
+    <div id="lockMsg" style="color:#ff8a8a; font-size:13px; margin-top:8px; min-height:18px"></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=28"></script>
+<script src="ctrl.js?v=29"></script>
 </body>
 </html>

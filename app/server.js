@@ -51,6 +51,7 @@ roster.classes.forEach((c, i) => {
   if (c.tt.pre === undefined) c.tt.pre = 0;    // 早读课开关
   if (c.tt.post === undefined) c.tt.post = 0;  // 晚托课开关
   if (!c.notice || typeof c.notice !== 'object') c.notice = { text: '', at: 0 };   // 班级公告
+  if (!Array.isArray(c.memos)) c.memos = [];   // 备忘录（按班级保存）
 });
 function saveRoster() { fs.writeFileSync(ROSTER_FILE, JSON.stringify(roster, null, 2), 'utf8'); }
 function todayStr() {
@@ -162,17 +163,29 @@ function pushState(roomId) { broadcast(roomId, { event: 'state', state: snapshot
 function snapshot(roomId) {
   const room = getRoom(roomId);
   const cls = roster.classes[roomClassIndex(roomId, room)] || { name: '', students: [] };
+  const allClasses = roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass }));
+  const curIdx = roomClassIndex(roomId, room);
+  const dirIdx = allClasses.findIndex(c => c.i === curIdx);
+  const currentClass = dirIdx >= 0 ? allClasses[dirIdx].i : curIdx;
+  // 班级密码门禁：未解锁时只回最小信息（名单/记录一概不给），前端弹密码框
+  if (cls.pass && !room.unlocked[cls.rid]) {
+    return {
+      locked: true, room: roomId, className: cls.name,
+      allClasses, currentClass, places: roster.places
+    };
+  }
   const qs = roomId !== '1' ? '?room=' + encodeURIComponent(roomId) : '';
   return {
     ctrlUrls: lanIPs().map(ip => `http://${ip}:${PORT}/ctrl.html${qs}`),
     className: cls.name,
     groups: cls.groups || [],
     students: cls.students.map(s => ({ name: s.name, sid: s.sid || '', group: s.group, weight: s.weight, pickedCount: s.pickedCount })),
-    allClasses: roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass })),
-    currentClass: roomClassIndex(roomId, room),
+    allClasses,
+    currentClass,
     tt: cls.tt || { am: 4, pm: 3, cells: {} },
     showTt: cls.prefs ? cls.prefs.showTt !== false : true,
     notice: cls.notice || { text: '', at: 0 },
+    memos: cls.memos || [],
     places: roster.places,
     pickedThisRound: room.pickedThisRound,
     lastPick: room.lastPick,
@@ -228,6 +241,11 @@ function pickStudents(roomId, { group = null, count = 1, noRepeat = true } = {})
 function handleCmd(body, res, roomId) {
   const session = getRoom(roomId);
   const cls = roster.classes[roomClassIndex(roomId, session)];
+  // 班级密码门禁：未解锁时只放行 unlockClass，其余指令一律拒绝
+  if (cls && cls.pass && !session.unlocked[cls.rid] && body.action !== 'unlockClass') {
+    res.end(JSON.stringify({ ok: false, msg: '需要班级密码' }));
+    return;
+  }
   const find = (name) => cls && cls.students.find(s => s.name === name);
   const disp = (s) => s.group ? `${s.name}(${s.group})` : s.name; // 显示名：带组名
   const now = Date.now();
@@ -413,8 +431,7 @@ function handleCmd(body, res, roomId) {
       if (cls.pass && old !== cls.pass) { ok = false; msg = '原密码不正确'; break; }
       const pass = String(body.pass || '').trim().slice(0, 20);
       cls.pass = pass || '';
-      const ci = roster.classes.indexOf(cls);
-      rooms.forEach(r => { delete r.unlocked[ci]; });   // 改密后旧解锁全部失效
+      rooms.forEach(r => { delete r.unlocked[cls.rid]; });   // 改密后旧解锁全部失效
       saveRoster();
       msg = pass ? '班级密码已设置' : '班级密码已移除';
       break;
@@ -431,11 +448,11 @@ function handleCmd(body, res, roomId) {
       if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
       const target = roster.classes[i];
       // 有密码的班级：需输入密码（本会话解锁过则免）
-      if (target.pass && !session.unlocked[i] && String(body.pass || '') !== target.pass) {
+      if (target.pass && !session.unlocked[target.rid] && String(body.pass || '') !== target.pass) {
         ok = false; msg = '需要班级密码'; break;
       }
       session.currentClass = i; roster.currentClass = i;
-      if (target.pass) session.unlocked[i] = true;
+      if (target.pass) session.unlocked[target.rid] = true;
       saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null;
       break;
     }
@@ -451,7 +468,7 @@ function handleCmd(body, res, roomId) {
       const pass = String(body.pass || '').trim().slice(0, 20);
       roster.classes.push({ name, rid: genRid(name, roster.classes.length), groups: [], students: [], absent: { date: '', names: [] }, pass });
       roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
-      if (pass) session.unlocked[roster.currentClass] = true;
+      if (pass) session.unlocked[roster.classes[roster.currentClass].rid] = true;
       session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
       saveRoster();
       msg = pass ? `已创建班级「${name}」（已设置密码）` : `已创建班级「${name}」`;
@@ -466,10 +483,10 @@ function handleCmd(body, res, roomId) {
       if (roster.classes[i].pass && String(body.pass || '') !== roster.classes[i].pass) {
         ok = false; msg = '需要班级密码'; break;
       }
-      const nm = roster.classes[i].name;
+      const nm = roster.classes[i].name, delRid = roster.classes[i].rid;
       roster.classes.splice(i, 1);
       if (roster.currentClass >= roster.classes.length) roster.currentClass = roster.classes.length - 1;
-      rooms.forEach(r => { if (r.currentClass >= roster.classes.length) r.currentClass = roster.classes.length - 1; delete r.unlocked[i]; });
+      rooms.forEach(r => { if (r.currentClass >= roster.classes.length) r.currentClass = roster.classes.length - 1; delete r.unlocked[delRid]; });
       session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
       saveRoster();
       msg = `已删除班级「${nm}」`;
@@ -605,6 +622,43 @@ function handleCmd(body, res, roomId) {
       session.pickedThisRound = []; session.lessonLog = [];
       saveRoster();
       msg = '统计已清零';
+      break;
+    }
+    case 'unlockClass': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      if (!cls.pass) break;   // 未加密班级无需解锁
+      if (String(body.pass || '') === cls.pass) { session.unlocked[cls.rid] = true; msg = '已解锁'; }
+      else { ok = false; msg = '密码不正确'; }
+      break;
+    }
+    // 备忘录（按班级保存）：添加 / 勾选完成 / 删除 / 清除已完成
+    case 'memoAdd': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const text = String(body.text || '').trim().slice(0, 200);
+      if (!text) { ok = false; msg = '内容为空'; break; }
+      cls.memos = cls.memos || [];
+      cls.memos.push({ id: now.toString(36) + Math.random().toString(36).slice(2, 6), text, at: now, done: false });
+      if (cls.memos.length > 100) cls.memos = cls.memos.slice(-100);
+      saveRoster(); msg = '已添加备忘';
+      break;
+    }
+    case 'memoToggle': {
+      if (!cls) break;
+      const m = (cls.memos || []).find(x => x.id === String(body.id || ''));
+      if (!m) { ok = false; msg = '备忘不存在'; break; }
+      m.done = !m.done; saveRoster();
+      break;
+    }
+    case 'memoDel': {
+      if (!cls) break;
+      cls.memos = (cls.memos || []).filter(x => x.id !== String(body.id || ''));
+      saveRoster();
+      break;
+    }
+    case 'memoClearDone': {
+      if (!cls) break;
+      cls.memos = (cls.memos || []).filter(x => !x.done);
+      saveRoster(); msg = '已清除已完成备忘';
       break;
     }
     default: ok = false; msg = '未知指令';

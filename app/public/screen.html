@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>课堂互动大屏 · 展示端</title>
-<link rel="stylesheet" href="style.css?v=28">
-<script src="theme.js?v=28"></script>
+<link rel="stylesheet" href="style.css?v=29">
+<script src="theme.js?v=29"></script>
 </head>
 <body class="screen">
   <!-- 传呼横条（缩小常驻） -->
@@ -47,6 +47,20 @@
         ③ 设备是否联网
       </div>
       <div class="unlock-sub" style="margin-top:2vmin; color:var(--accent); cursor:pointer" onclick="location.reload()">⟳ 点这里刷新重试</div>
+    </div>
+  </div>
+
+  <!-- 班级密码锁定（直接打开加密班级 URL 时出现） -->
+  <div class="unlock-overlay" id="classLock" style="display:none">
+    <div class="unlock-card">
+      <div class="unlock-bell">🔒</div>
+      <div class="unlock-text">「<span id="classLockName"></span>」已加密</div>
+      <div class="unlock-sub">输入班级密码解锁；也可在教师控制端解锁，解锁后本页自动进入</div>
+      <div class="unlock-sub" style="margin-top:2vmin; display:flex; gap:1vmin; justify-content:center; align-items:center">
+        <input type="text" id="classLockPass" placeholder="班级密码" style="padding:1.2vmin 2vmin; border-radius:1.2vmin; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; font-size:2.4vmin; width:32vmin">
+        <button id="classLockBtn" style="padding:1.2vmin 3vmin; border-radius:1.2vmin; border:none; background:#0a84ff; color:#fff; font-size:2.4vmin; cursor:pointer">解锁</button>
+      </div>
+      <div class="unlock-sub" id="classLockMsg" style="color:#ff8a8a; min-height:2.6vmin"></div>
     </div>
   </div>
 
@@ -106,7 +120,7 @@
 
   <div class="s-toast" id="screenToast"></div>
 
-<script src="vendor/qrcode.min.js?v=28"></script>
-<script src="screen.js?v=28"></script>
+<script src="vendor/qrcode.min.js?v=29"></script>
+<script src="screen.js?v=29"></script>
 </body>
 </html>
