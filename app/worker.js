@@ -166,7 +166,9 @@ export class Room {
   async proxyCmd(body) {
     try {
       const stub = this.env.ROOM.get(this.env.ROOM.idFromName('main'));
-      const r = await stub.fetch('https://do/api/cmd?room=1', {
+      // 走主实例内部通道（公网不可达）：主实例跳过外层房间门禁，
+      // 管理指令自身的目标班密码校验（classSwitch/delClass 等）仍然生效
+      const r = await stub.fetch('https://do/internal/proxy-cmd', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
@@ -194,7 +196,8 @@ export class Room {
       const idx = this.roster.classes.findIndex(c => c.rid === id);
       const p = (idx >= 0 && this.roster.classes[idx].prefs) || {};
       this.rooms.set(id, {
-        currentClass: idx >= 0 ? idx : 0,   // room 是班级 rid 时绑定该班级，否则从第一个班级开始
+        // room 是班级 rid 时绑定该班级；否则沿用全局当前班（DO 休眠重启后会话重建，避免回落到第 0 班）
+        currentClass: idx >= 0 ? idx : Math.min(this.roster.currentClass || 0, this.roster.classes.length - 1),
         pickedThisRound: [], lastPick: null, answering: null, page: null,
         examMode: false,
         volume: p.volume !== undefined ? p.volume : 0.3,
@@ -340,13 +343,15 @@ export class Room {
   /* ---------------- 指令处理 ---------------- */
   // 班级列表管理类指令：班级实例转发主实例（班级名单唯一权威在主实例）
   static PROXY_TO_MAIN = ['classSwitch', 'addClass', 'delClass', 'importRoster', 'addPlace'];
-  async handleCmd(body, roomId) {
+  async handleCmd(body, roomId, opts = {}) {
     await this.ready;
     if (this.mode === 'class' && Room.PROXY_TO_MAIN.includes(body.action)) return this.proxyCmd(body);
     const roster = this.roster, session = this.getRoom(roomId);
     const cls = roster.classes[this.roomClassIndex(roomId, session)];
-    // 班级密码门禁：未解锁时只放行 unlockClass，其余指令一律拒绝
-    if (cls && cls.pass && !session.unlocked[cls.rid] && body.action !== 'unlockClass') {
+    // 班级密码门禁：未解锁时只放行 unlockClass，其余指令一律拒绝。
+    // 主实例内部转发通道(internal/proxy-cmd)跳过外层房间门禁——班级实例自身已做同等级校验，
+    // 否则 room '1' 当前班的锁定态会误拦其他班级页转发来的管理指令。
+    if (!opts.skipGate && cls && cls.pass && !session.unlocked[cls.rid] && body.action !== 'unlockClass') {
       return json({ ok: false, msg: '需要班级密码' });
     }
     const find = (name) => cls && cls.students.find(x => x.name === name);
@@ -794,6 +799,12 @@ export class Room {
         await this.state.storage.put('roster', this.roster);
       }
       return json({ ok: true });
+    }
+    // 班级实例转发来的管理指令：以 room '1' 会话执行，跳过外层房间门禁
+    //（班级实例侧已做过同等级门禁；classSwitch/delClass 等指令内部仍校验目标班密码）
+    if (this.mode === 'main' && url.pathname === '/internal/proxy-cmd' && req.method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      return this.handleCmd(body, '1', { skipGate: true });
     }
     if (url.pathname === '/events') return this.sseResponse(roomId);
     if (url.pathname === '/api/state') return json(this.snapshot(roomId));
