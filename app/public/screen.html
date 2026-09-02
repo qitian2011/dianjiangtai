@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>课堂互动大屏 · 展示端</title>
-<link rel="stylesheet" href="style.css?v=30">
-<script src="theme.js?v=30"></script>
+<link rel="stylesheet" href="style.css?v=31">
+<script src="theme.js?v=31"></script>
 </head>
 <body class="screen">
   <!-- 传呼横条（缩小常驻） -->
@@ -72,6 +72,10 @@
           <div class="np-title">📢 公告</div>
           <div class="np-body" id="noticeTextEl"></div>
         </div>
+        <div class="notice-panel" id="memoPanel" style="display:none">
+          <div class="np-title">📝 作业栏</div>
+          <div class="np-body" id="memoBodyEl"></div>
+        </div>
         <div class="tt-panel" id="standbyTt"></div>
       </div>
       <div class="qr-corner" id="qrCorner"></div>
@@ -120,7 +124,7 @@
 
   <div class="s-toast" id="screenToast"></div>
 
-<script src="vendor/qrcode.min.js?v=30"></script>
-<script src="screen.js?v=30"></script>
+<script src="vendor/qrcode.min.js?v=31"></script>
+<script src="screen.js?v=31"></script>
 </body>
 </html>

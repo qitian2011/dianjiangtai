@@ -36,6 +36,7 @@ function normalizeClass(c) {
   if (c.prefs.animationMs === undefined) c.prefs.animationMs = 3000;
   if (c.prefs.voiceMode === undefined) c.prefs.voiceMode = 'sound';
   if (c.prefs.showTt === undefined) c.prefs.showTt = true;
+  if (c.prefs.showMemos === undefined) c.prefs.showMemos = false;   // 大屏作业栏开关（默认关）
   if (!c.tt || typeof c.tt !== 'object') c.tt = { am: 4, pm: 3, cells: {} };
   if (!c.tt.cells) c.tt.cells = {};
   if (!c.tt.times) c.tt.times = {};
@@ -258,6 +259,7 @@ export class Room {
       currentClass,
       tt: cls.tt || { am: 4, pm: 3, cells: {} },
       showTt: cls.prefs ? cls.prefs.showTt !== false : true,
+      showMemos: cls.prefs ? !!cls.prefs.showMemos : false,
       notice: cls.notice || { text: '', at: 0 },
       memos: cls.memos || [],
       places: this.roster.places,
@@ -543,6 +545,13 @@ export class Room {
         cls.prefs = cls.prefs || {};
         cls.prefs.showTt = !!body.on;
         this.saveRoster(); msg = body.on ? '大屏已显示课表' : '大屏已隐藏课表';
+        break;
+      }
+      case 'setShowMemos': {
+        if (!cls) { ok = false; msg = '无班级'; break; }
+        cls.prefs = cls.prefs || {};
+        cls.prefs.showMemos = !!body.on;
+        this.saveRoster(); msg = body.on ? '大屏已显示作业栏' : '大屏已隐藏作业栏';
         break;
       }
       case 'setClassPass': {

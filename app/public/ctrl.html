@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=30">
-<script src="theme.js?v=30"></script>
+<link rel="stylesheet" href="style.css?v=31">
+<script src="theme.js?v=31"></script>
 </head>
 <body>
 <div class="ctrl-wrap">
@@ -170,8 +170,9 @@
       <ul class="history" id="memoList" style="margin-top:8px"><li>暂无</li></ul>
       <div class="row" style="margin-top:6px">
         <button class="btn small" id="memoClearDoneBtn">清除已完成</button>
-        <span style="font-size:12px; color:var(--dim)">勾选=已完成，×=删除，最长 200 字/条</span>
+        <label class="switch" style="margin-left:auto"><input type="checkbox" id="showMemosChk"> 在大屏显示作业栏</label>
       </div>
+      <div style="font-size:12px; color:var(--dim); margin-top:8px">勾选=已完成，×=删除，最长 200 字/条。开启后大屏待机页常驻显示<b>未完成</b>的备忘录作为作业栏，做完勾掉即从大屏消失（按班级保存）</div>
     </div>
     <div class="card">
       <h3>节次设置</h3>
@@ -294,6 +295,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=30"></script>
+<script src="ctrl.js?v=31"></script>
 </body>
 </html>
