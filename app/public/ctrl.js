@@ -108,9 +108,13 @@ function render() {
   $('absentEdit').innerHTML = S.students.map(s =>
     `<span class="chip ${absent.includes(s.name) ? 'sel' : ''}" data-a="${s.name}">${s.name}</span>`).join('')
     || '<span style="color:var(--dim)">名单为空</span>';
-  // 本节课记录
+  // 本节课记录（判定结果随行显示：✅答对 / ❌答错 / ⏳未答 / ⏭跳过）
+  const RES = { right: ['✅答对', '#2f9e44'], wrong: ['❌答错', '#e03131'], none: ['⏳未答', '#868e96'], skip: ['⏭跳过', '#868e96'] };
   $('lessonList').innerHTML = S.lessonLog.length
-    ? S.lessonLog.map(l => `<li><b>${(l.display || l.names).join('、')}</b><span>${timeStr(l.at)}</span></li>`).join('') : '<li>暂无</li>';
+    ? S.lessonLog.map(l => {
+      const r = RES[l.result];
+      return `<li><b>${(l.display || l.names).join('、')}</b><span>${r ? `<i style="color:${r[1]};font-style:normal;margin-right:6px">${r[0]}</i>` : ''}${timeStr(l.at)}</span></li>`;
+    }).join('') : '<li>暂无</li>';
   // 传呼候选学生（姓名+学号；有学号显示学号、无学号显示组别，搜索姓名/学号均可）
   const kw = $('stuSearch').value.trim();
   $('pageStudents').innerHTML = S.students
@@ -164,6 +168,8 @@ function render() {
   $('showTtChk').checked = S.showTt !== false;
   // 大屏作业栏（备忘录）显示开关
   $('showMemosChk').checked = !!S.showMemos;
+  // 上课自动考试模式总开关
+  $('autoExamChk').checked = S.autoExam !== false;
 }
 
 /* ---------- 点名答题倒计时（控制端卡片内，按服务器 deadline 本地 tick，与大屏同步） ---------- */
@@ -461,6 +467,7 @@ $('renameClassBtn').onclick = () => {
   if (name && name.trim() && name.trim() !== cur) cmd({ action: 'renameClass', name: name.trim() });
 };
 $('examChk').onchange = e => cmd({ action: 'examMode', on: e.target.checked });
+$('autoExamChk').onchange = e => cmd({ action: 'setAutoExam', on: e.target.checked });
 $('animChips').addEventListener('click', e => { if (e.target.dataset.ms) cmd({ action: 'setAnim', ms: +e.target.dataset.ms }); });
 $('voiceChips').addEventListener('click', e => { if (e.target.dataset.m) cmd({ action: 'setVoiceMode', mode: e.target.dataset.m }); });
 $('themeChips').addEventListener('click', e => { if (e.target.dataset.t) { window.__setTheme(e.target.dataset.t); render(); } });

@@ -44,6 +44,7 @@ roster.classes.forEach((c, i) => {
   if (c.prefs.voiceMode === undefined) c.prefs.voiceMode = 'sound';
   if (c.prefs.showTt === undefined) c.prefs.showTt = true;
   if (c.prefs.showMemos === undefined) c.prefs.showMemos = false;   // 大屏作业栏开关（默认关）
+  if (c.prefs.autoExam === undefined) c.prefs.autoExam = true;   // 按课表：上课时间自动进考试模式（默认开，未配节次时间的班不受影响）
   if (!c.tt || typeof c.tt !== 'object') c.tt = { am: 4, pm: 3, cells: {} };   // 班级课表
   if (!c.tt.cells) c.tt.cells = {};
   if (!c.tt.times) c.tt.times = {};
@@ -88,6 +89,50 @@ function currentSlotKey(tt) {
   }
   return null;
 }
+// 按课表判断当前是否在上课时间内（自动考试模式用）。与 currentSlotKey 不同：要求节次起止时间都配全
+// ——只有完整起止时间的节次才参与自动切换，避免"只填开始时间"的节次让考试模式迟迟不退出
+function autoInClass(tt) {
+  if (!tt || !tt.times) return false;
+  const d = new Date();
+  const dow = d.getDay();           // 1-5 周一~周五
+  if (dow < 1 || dow > 5) return false;
+  const nowMin = d.getHours() * 60 + d.getMinutes();
+  const slots = [];
+  if (tt.pre) slots.push('pre');
+  for (let s = 0; s < (tt.am || 0); s++) slots.push(String(s));
+  for (let s = 0; s < (tt.pm || 0); s++) slots.push(String((tt.am || 0) + s));
+  if (tt.post) slots.push('post');
+  for (const key of slots) {
+    const t = tt.times[key];
+    if (!t || !t.s || !t.e) continue;   // 起止必须完整
+    const sp = String(t.s).split(':'), ep = String(t.e).split(':');
+    const sh = parseInt(sp[0], 10), sm = parseInt(sp[1], 10), eh = parseInt(ep[0], 10), em = parseInt(ep[1], 10);
+    if (isNaN(sh) || isNaN(eh)) continue;
+    const sMin = sh * 60 + (isNaN(sm) ? 0 : sm), eMin = eh * 60 + (isNaN(em) ? 0 : em);
+    if (nowMin >= sMin && nowMin < eMin) return true;
+  }
+  return false;
+}
+// 把点名判定结果写回「本节课记录」中对应轮次（尾向找第一条未标记且包含这些名字的记录，兼容多轮同名）
+function tagLessonLog(session, names, result) {
+  const log = session.lessonLog;
+  for (let i = log.length - 1; i >= 0; i--) {
+    const l = log[i];
+    if (!l.result && Array.isArray(l.names) && l.names.length && names.every(n => l.names.includes(n))) { l.result = result; return; }
+  }
+}
+// 按课表自动考试模式轮询：上课时间自动开（标记 examModeAuto），离开上课时间只回收"自动开启"的状态；
+// 老师手动切换过（examMode 指令会清除 examModeAuto）的状态不回收，避免覆盖老师的主动操作
+function autoExamTickAll() {
+  for (const [roomId, room] of rooms) {
+    const cls = roster.classes[roomClassIndex(roomId, room)];
+    if (!cls || !cls.prefs || cls.prefs.autoExam === false) continue;   // 该班总开关关闭：不干预
+    const inClass = autoInClass(cls.tt);
+    if (inClass && !room.examMode) { room.examMode = true; room.examModeAuto = true; pushState(roomId); }
+    else if (!inClass && room.examMode && room.examModeAuto) { room.examMode = false; room.examModeAuto = false; pushState(roomId); }
+  }
+}
+
 // 返回当前班级当日有效的请假名单（过滤掉已不在名单中的名字）
 function absentNames(cls) {
   if (!cls || !cls.absent || cls.absent.date !== todayStr()) return [];
@@ -125,6 +170,7 @@ function getRoom(id) {
       answering: null,       // {name, deadline, duration}
       page: null,            // {names, sids, place, from, note, sentAt, confirmed, retracted}
       examMode: false,
+      examModeAuto: false,   // true=由课表自动开启（下课可自动回收）；false=手动开关（自动逻辑不覆盖）
       volume: p.volume !== undefined ? p.volume : 0.3,
       animationMs: p.animationMs !== undefined ? p.animationMs : 3000,
       rollStyle: 'classic',
@@ -203,6 +249,7 @@ function snapshot(roomId, sid = '') {
     tt: cls.tt || { am: 4, pm: 3, cells: {} },
     showTt: cls.prefs ? cls.prefs.showTt !== false : true,
     showMemos: cls.prefs ? !!cls.prefs.showMemos : false,
+    autoExam: cls.prefs ? cls.prefs.autoExam !== false : true,
     notice: cls.notice || { text: '', at: 0 },
     memos: cls.memos || [],
     places: roster.places,
@@ -324,6 +371,8 @@ function handleCmd(body, res, roomId, sid = '') {
         else st.missed += session.lastPick.names.length;
         cls.tt.stats[tkey] = st;
       }
+      // 把判定结果写进「本节课记录」（控制端/大屏同步显示 ✅答对 / ❌答错 / 未答）
+      tagLessonLog(session, session.lastPick.names, body.result === 'right' ? 'right' : body.result === 'wrong' ? 'wrong' : 'none');
       session.answering = null;
       saveRoster();
       broadcast(roomId, { event: 'marked', result: body.result });
@@ -332,6 +381,7 @@ function handleCmd(body, res, roomId, sid = '') {
     case 'skip': {
       if (!session.lastPick) { ok = false; msg = '请先点名'; break; }
       for (const n of session.lastPick.names) { const s = find(n); if (s) s.skipped = (s.skipped || 0) + 1; }
+      tagLessonLog(session, session.lastPick.names, 'skip');   // 跳过也记入本节课记录
       const sk2 = currentSlotKey(cls.tt);
       if (sk2 !== null) {
         cls.tt.stats = cls.tt.stats || {};
@@ -379,7 +429,7 @@ function handleCmd(body, res, roomId, sid = '') {
     }
     case 'pageConfirm': if (session.page) { session.page.confirmed = true; session.pageLog.forEach(p => { if (!p.retracted && !p.confirmed) p.confirmed = true; }); } break;
     case 'pageRetract': if (session.page) { session.page.retracted = true; session.pageLog.forEach(p => { if (!p.confirmed) p.retracted = true; }); session.page = null; } break;
-    case 'examMode': session.examMode = !!body.on; break;
+    case 'examMode': session.examMode = !!body.on; session.examModeAuto = false; break;   // 手动切换：清除"自动开启"标记，自动逻辑不回收
     // 班级设置：改动即写回班级 prefs 持久化（rid 绑定的房间），重启不丢
     case 'setVolume': session.volume = Math.min(1, Math.max(0, +body.value || 0)); saveClassPrefs(roomId, session); break;
     case 'setAnim': session.animationMs = [2000, 3000, 5000].includes(body.ms) ? body.ms : 3000; saveClassPrefs(roomId, session); break;
@@ -448,6 +498,13 @@ function handleCmd(body, res, roomId, sid = '') {
       cls.prefs = cls.prefs || {};
       cls.prefs.showMemos = !!body.on;
       saveRoster(); msg = body.on ? '大屏已显示作业栏' : '大屏已隐藏作业栏';
+      break;
+    }
+    case 'setAutoExam': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      cls.prefs = cls.prefs || {};
+      cls.prefs.autoExam = !!body.on;
+      saveRoster(); msg = body.on ? '已开启：上课时间自动进入考试模式' : '已关闭：不再按课表自动切换考试模式';
       break;
     }
     case 'setClassPass': {
@@ -751,3 +808,6 @@ server.listen(PORT, '0.0.0.0', () => {
   for (const ip of lanIPs()) console.log(`    http://${ip}:${PORT}/ctrl.html`);
   console.log('==============================================');
 });
+// 按课表自动考试模式：每 20 秒轮询一次。pushState 内部只推送"有活跃大屏/控制端连接"的房间，
+// 无人使用的房间（无 SSE 连接）即使轮询到也只是空转，不产生任何外部影响
+setInterval(autoExamTickAll, 20000);

@@ -486,7 +486,10 @@ function render() {
   } else {
     $('examStrip').style.display = 'none';
   }
-  // 本节课点名录
-  $('lessonLog').innerHTML = (S.lessonLog || []).map(l => `<div>${(l.display || l.names).join('、')}</div>`).join('');
+  // 本节课点名录（判定结果：✓答对 ✗答错 — 未答 ⏭跳过，随行小标）
+  const RES = { right: ['✓', '#7bd88f'], wrong: ['✗', '#ff8080'], none: ['—', '#9a9a9a'], skip: ['⏭', '#9a9a9a'] };
+  $('lessonLog').innerHTML = (S.lessonLog || []).map(l =>
+    `<div>${(l.display || l.names).join('、')}${l.result && RES[l.result] ? ` <b style="color:${RES[l.result][1]}">${RES[l.result][0]}</b>` : ''}</div>`
+  ).join('');
 }
 setInterval(() => { const d = new Date(); $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }, 10000);
