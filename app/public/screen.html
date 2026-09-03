@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>课堂互动大屏 · 展示端</title>
-<link rel="stylesheet" href="style.css?v=34">
+<link rel="stylesheet" href="style.css?v=35">
 <script src="theme.js?v=34"></script>
 </head>
 <body class="screen">
@@ -23,7 +23,10 @@
       <span class="cls" id="className" title="点击切换班级">—</span>
       <span class="cls-hint">⇅ 切班</span>
     </div>
-    <span id="clock"></span>
+    <div class="tb-right">
+      <span id="clock"></span>
+      <button class="tb-dl" id="dlBtn" title="下载桌面版客户端与资料" onclick="window.open('download.html','_blank')">⬇</button>
+    </div>
   </div>
 
   <!-- 声音解锁提示（浏览器自动播放策略：必须有一次屏幕点击才允许出声） -->
