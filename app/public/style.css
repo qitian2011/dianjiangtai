@@ -310,6 +310,13 @@ label.switch input:checked::after { transform: translateX(19px); }
 
 .result-card { text-align: center; padding: 20px 10px; }
 .result-card .names { font-size: 40px; font-weight: 800; color: var(--yellow); letter-spacing: 4px; }
+/* 控制端答题倒计时（点名答题结果卡内，与判定按钮同处查看操作） */
+.result-card .cd-line { display: flex; align-items: baseline; justify-content: center; gap: 10px; margin-top: 10px; min-height: 52px; }
+.result-card .pick-cd { font-size: 46px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1; text-shadow: 0 0 24px rgba(10,132,255,.3); }
+.result-card .pick-cd.low { color: var(--red); animation: ctrlCdBlink 1s steps(2, start) infinite; }
+.result-card .pick-cd.over { color: var(--orange); }
+.result-card .pick-cd-tag { font-size: 13px; color: var(--dim); }
+@keyframes ctrlCdBlink { 50% { opacity: .35; } }
 
 .stu-list { max-height: 46vh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px; }
 .stu-item { display: flex; align-items: center; gap: 8px; padding: 10px 10px; border-radius: 14px; font-size: 15px; transition: background .2s; }
@@ -352,7 +359,7 @@ label.switch input:checked::after { transform: translateX(19px); }
   content: ''; position: fixed; inset: 0; z-index: 3; pointer-events: none; opacity: .045;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-.screen .center { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 13vh 6vw 17vh; z-index: 1; }
+.screen .center { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 16vh 6vw 17vh; z-index: 1; }
 
 .screen .topbar {
   position: absolute; top: 16px; left: 26px; right: 26px; display: flex; justify-content: space-between; align-items: center;
@@ -545,12 +552,14 @@ label.switch input:checked::after { transform: translateX(19px); }
   border: 1px solid var(--separator); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
 }
 
-.lesson-log { position: absolute; right: 2vmin; top: 10vmin; width: 22vmin; max-height: 60vh; overflow: hidden; font-size: 2.4vmin; color: var(--dim); opacity: .7; z-index: 4; text-align: right; }
+.lesson-log { position: absolute; right: 2vmin; width: 22vmin; max-height: 60vh; overflow: hidden; font-size: 2.4vmin; color: var(--dim); opacity: .7; z-index: 4; text-align: right; }
+/* 抽人记录：top 同时给像素下限，保证 150% 缩放/小分辨率下仍低于顶部时间栏（约 74px 高），互不遮挡 */
+.lesson-log { top: max(11vmin, 96px); }
 .lesson-log div { padding: .4vmin 0; border-bottom: 1px dashed var(--separator); }
 
-/* 小屏 / 竖屏：待机页内容垂直堆叠，防止公告栏过窄、课表被压 */
+/* 小屏 / 竖屏：待机页内容垂直堆叠，防止公告栏过窄、课表被压（顶部留白同步加大防拥挤） */
 @media (max-aspect-ratio: 4/3), (max-width: 900px) {
-  .screen .center { padding: 12vh 5vw 13vh; }
+  .screen .center { padding: 15vh 5vw 14vh; }
   .screen .standby-row { flex-direction: column; align-items: center; gap: 3vmin; }
   .screen .notice-panel { flex: 0 0 auto; width: 100%; max-width: 100%; max-height: 24vh; }
   .screen .tt-panel { width: 100%; }
