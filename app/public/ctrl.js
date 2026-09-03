@@ -279,8 +279,14 @@ $('pageBtn').onclick = async () => {
   if (pageSel.length === 0) return toast('请先选择学生');
   if (!selPlace) return toast('请选择去处');
   localStorage.setItem('teacherName', $('fromInput').value.trim());
-  await cmd({ action: 'page', names: pageSel.map(x => x.n), sids: pageSel.map(x => x.s), place: selPlace, from: $('fromInput').value.trim(), note: $('noteInput').value.trim() });
+  const frm = $('fromInput').value.trim(), note = $('noteInput').value.trim();
+  const pageNames = pageSel.map(x => x.n).join('、');
+  const r = await cmd({ action: 'page', names: pageSel.map(x => x.n), sids: pageSel.map(x => x.s), place: selPlace, from: frm, note });
   pageSel = []; $('noteInput').value = ''; render();
+  // 桌面版：传呼发起成功弹系统通知确认（普通浏览器自动跳过）
+  if (r && r.ok !== false && window.djt && window.djt.notify) {
+    window.djt.notify(`📢 已传呼：${pageNames}`, `请到「${selPlace}」` + (frm ? ` 找 ${frm}` : ''));
+  }
 };
 $('confirmBtn').onclick = () => cmd({ action: 'pageConfirm' });
 $('retractBtn').onclick = () => cmd({ action: 'pageRetract' });
