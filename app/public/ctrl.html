@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=31">
-<script src="theme.js?v=31"></script>
+<link rel="stylesheet" href="style.css?v=32">
+<script src="theme.js?v=32"></script>
 </head>
 <body>
 <div class="ctrl-wrap">
@@ -54,6 +54,10 @@
     </div>
     <div class="card result-card" id="pickResult" style="display:none; margin-top:14px">
       <div class="names" id="pickNames"></div>
+      <div class="cd-line" id="pickCdLine" style="display:none">
+        <div class="pick-cd" id="pickCd">—</div>
+        <div class="pick-cd-tag" id="pickCdTag"></div>
+      </div>
       <div class="row" style="justify-content:center; margin-top:14px" id="answerBtns">
         <button class="btn success" id="askBtn">🎤 请回答</button>
         <button class="btn warn" id="skipBtn">跳过TA →</button>
@@ -92,15 +96,9 @@
       <div class="row"><input type="text" id="noteInput" placeholder="留言（选填，≤30字）" maxlength="30"></div>
     </div>
     <div class="card">
-      <h3>3 · 大屏显示时长</h3>
-      <div class="count-select" id="durChips">
-        <span class="chip" data-d="15">15秒</span><span class="chip sel" data-d="30">30秒</span>
-        <span class="chip" data-d="60">1分钟</span><span class="chip" data-d="0">常驻</span>
-      </div>
-      <div class="row" style="margin-top:8px">
-        <span class="meta" style="color:var(--dim); font-size:14px">自定义：</span>
-        <input type="number" id="durCustom" min="0" max="3600" step="5" placeholder="秒数（如 45）" style="flex:1">
-        <span class="meta" style="color:var(--dim); font-size:14px">秒（0=常驻）</span>
+      <h3>3 · 传呼说明</h3>
+      <div style="font-size:13px; color:var(--dim); line-height:1.8">
+        传呼发出后，大屏居中弹窗统一展示 <b>5 秒</b>后自动收起；未点「✅ 已到」的传呼会保留在右下角堆叠，也可在下方的「当前传呼」中确认或撤回。
       </div>
     </div>
     <button class="btn danger big" id="pageBtn">📢 发 送 传 呼</button>
@@ -295,6 +293,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=31"></script>
+<script src="ctrl.js?v=32"></script>
 </body>
 </html>
