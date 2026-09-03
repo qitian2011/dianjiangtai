@@ -37,6 +37,7 @@ function normalizeClass(c) {
   if (c.prefs.voiceMode === undefined) c.prefs.voiceMode = 'sound';
   if (c.prefs.showTt === undefined) c.prefs.showTt = true;
   if (c.prefs.showMemos === undefined) c.prefs.showMemos = false;   // 大屏作业栏开关（默认关）
+  if (c.prefs.autoExam === undefined) c.prefs.autoExam = true;   // 按课表：上课时间自动进考试模式（默认开，未配节次时间的班不受影响）
   if (!c.tt || typeof c.tt !== 'object') c.tt = { am: 4, pm: 3, cells: {} };
   if (!c.tt.cells) c.tt.cells = {};
   if (!c.tt.times) c.tt.times = {};
@@ -81,6 +82,37 @@ function currentSlotKey(tt) {
     if (nowMin >= sMin && nowMin < eMin) return sl.key;
   }
   return null;
+}
+// 按课表判断当前是否在上课时间内（自动考试模式用，东八区视角；起止时间必须配全才参与自动切换）
+function autoInClass(tt) {
+  if (!tt || !tt.times) return false;
+  const sh = new Date(Date.now() + 8 * 3600 * 1000);
+  const dow = sh.getUTCDay();          // 1-5 周一~周五（东八区视角）
+  if (dow < 1 || dow > 5) return false;
+  const nowMin = sh.getUTCHours() * 60 + sh.getUTCMinutes();
+  const slots = [];
+  if (tt.pre) slots.push('pre');
+  for (let s = 0; s < (tt.am || 0); s++) slots.push(String(s));
+  for (let s = 0; s < (tt.pm || 0); s++) slots.push(String((tt.am || 0) + s));
+  if (tt.post) slots.push('post');
+  for (const key of slots) {
+    const t = tt.times[key];
+    if (!t || !t.s || !t.e) continue;   // 起止必须完整
+    const sp = String(t.s).split(':'), ep = String(t.e).split(':');
+    const shh = parseInt(sp[0], 10), sm = parseInt(sp[1], 10), eh = parseInt(ep[0], 10), em = parseInt(ep[1], 10);
+    if (isNaN(shh) || isNaN(eh)) continue;
+    const sMin = shh * 60 + (isNaN(sm) ? 0 : sm), eMin = eh * 60 + (isNaN(em) ? 0 : em);
+    if (nowMin >= sMin && nowMin < eMin) return true;
+  }
+  return false;
+}
+// 把点名判定结果写回「本节课记录」中对应轮次（尾向找第一条未标记且包含这些名字的记录）
+function tagLessonLog(session, names, result) {
+  const log = session.lessonLog;
+  for (let i = log.length - 1; i >= 0; i--) {
+    const l = log[i];
+    if (!l.result && Array.isArray(l.names) && l.names.length && names.every(n => l.names.includes(n))) { l.result = result; return; }
+  }
 }
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
@@ -201,6 +233,7 @@ export class Room {
         currentClass: idx >= 0 ? idx : Math.min(this.roster.currentClass || 0, this.roster.classes.length - 1),
         pickedThisRound: [], lastPick: null, answering: null, page: null,
         examMode: false,
+        examModeAuto: false,   // true=由课表自动开启（下课可自动回收）；false=手动开关（自动逻辑不覆盖）
         volume: p.volume !== undefined ? p.volume : 0.3,
         animationMs: p.animationMs !== undefined ? p.animationMs : 3000,
         rollStyle: 'classic',
@@ -260,6 +293,7 @@ export class Room {
       tt: cls.tt || { am: 4, pm: 3, cells: {} },
       showTt: cls.prefs ? cls.prefs.showTt !== false : true,
       showMemos: cls.prefs ? !!cls.prefs.showMemos : false,
+      autoExam: cls.prefs ? cls.prefs.autoExam !== false : true,
       notice: cls.notice || { text: '', at: 0 },
       memos: cls.memos || [],
       places: this.roster.places,
@@ -295,9 +329,26 @@ export class Room {
       catch (e) { this.sse.delete(w); }
     }
   }
+  // 按课表自动考试模式轮询：并入 SSE 心跳（只在有活跃连接时执行，DO 空闲不空转）。
+  // 上课时间自动开（标记 examModeAuto），离开上课时间只回收"自动开启"的状态；
+  // 老师手动切换（examMode 指令清除 examModeAuto）的状态不回收，避免覆盖老师的主动操作
+  autoExamTickAll() {
+    if (!this.roster || !Array.isArray(this.roster.classes)) return;   // DO 尚未就绪
+    for (const [roomId, room] of this.rooms) {
+      const cls = this.roster.classes[this.roomClassIndex(roomId, room)];
+      if (!cls || !cls.prefs || cls.prefs.autoExam === false) continue;   // 该班总开关关闭：不干预
+      const inClass = autoInClass(cls.tt);
+      if (inClass && !room.examMode) { room.examMode = true; room.examModeAuto = true; this.pushState(roomId); }
+      else if (!inClass && room.examMode && room.examModeAuto) { room.examMode = false; room.examModeAuto = false; this.pushState(roomId); }
+    }
+  }
   ensureHeartbeat() {
     if (this.hb) return;
-    this.hb = setInterval(() => { if (this.sse.size) this.raw(': ping\n\n'); }, 25000);
+    this.hb = setInterval(() => {
+      if (!this.sse.size) return;
+      this.raw(': ping\n\n');
+      this.autoExamTickAll();
+    }, 25000);
   }
   sseResponse(roomId, sid = '') {
     this.ensureHeartbeat();
@@ -430,6 +481,8 @@ export class Room {
           else st.missed += session.lastPick.names.length;
           cls.tt.stats[tkey] = st;
         }
+        // 把判定结果写进「本节课记录」（控制端/大屏同步显示 ✅答对 / ❌答错 / 未答）
+        tagLessonLog(session, session.lastPick.names, body.result === 'right' ? 'right' : body.result === 'wrong' ? 'wrong' : 'none');
         session.answering = null;
         this.saveRoster();
         this.broadcast(roomId, { event: 'marked', result: body.result });
@@ -438,6 +491,7 @@ export class Room {
       case 'skip': {
         if (!session.lastPick) { ok = false; msg = '请先点名'; break; }
         for (const n of session.lastPick.names) { const x = find(n); if (x) x.skipped = (x.skipped || 0) + 1; }
+        tagLessonLog(session, session.lastPick.names, 'skip');   // 跳过也记入本节课记录
         const sk2 = currentSlotKey(cls.tt);
         if (sk2 !== null) {
           cls.tt.stats = cls.tt.stats || {};
@@ -484,7 +538,7 @@ export class Room {
       }
       case 'pageConfirm': if (session.page) { session.page.confirmed = true; session.pageLog.forEach(p => { if (!p.retracted && !p.confirmed) p.confirmed = true; }); } break;
       case 'pageRetract': if (session.page) { session.page.retracted = true; session.pageLog.forEach(p => { if (!p.confirmed) p.retracted = true; }); session.page = null; } break;
-      case 'examMode': session.examMode = !!body.on; break;
+      case 'examMode': session.examMode = !!body.on; session.examModeAuto = false; break;   // 手动切换：清除"自动开启"标记，自动逻辑不回收
       case 'setVolume': session.volume = Math.min(1, Math.max(0, +body.value || 0)); this.saveClassPrefs(roomId, session); break;
       case 'setAnim': session.animationMs = [2000, 3000, 5000].includes(body.ms) ? body.ms : 3000; this.saveClassPrefs(roomId, session); break;
       case 'setRollStyle': session.rollStyle = 'classic'; break;
@@ -552,6 +606,13 @@ export class Room {
         cls.prefs = cls.prefs || {};
         cls.prefs.showMemos = !!body.on;
         this.saveRoster(); msg = body.on ? '大屏已显示作业栏' : '大屏已隐藏作业栏';
+        break;
+      }
+      case 'setAutoExam': {
+        if (!cls) { ok = false; msg = '无班级'; break; }
+        cls.prefs = cls.prefs || {};
+        cls.prefs.autoExam = !!body.on;
+        this.saveRoster(); msg = body.on ? '已开启：上课时间自动进入考试模式' : '已关闭：不再按课表自动切换考试模式';
         break;
       }
       case 'setClassPass': {
