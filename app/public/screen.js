@@ -379,6 +379,10 @@ function showPage(page) {
   if (lastPageSoundAt === page.sentAt) return;   // 同一传呼只播一次提示音/AI 语音
   lastPageSoundAt = page.sentAt;
   sfx.page();
+  // 桌面版（window.djt 由 preload 注入）：把「叫人」同步推送到 Windows 系统通知，窗口被遮挡/最小化也不漏看；普通浏览器里自动跳过
+  if (window.djt && window.djt.notify) {
+    window.djt.notify(`📢 传呼：${sayNames}`, `请到「${page.place}」` + (page.from ? ` 找 ${page.from}` : '') + (page.note ? `（${page.note}）` : ''));
+  }
   // AI 播报：XX 同学，请到「教务处」找李老师，带上作业本（含留言）
   if (voiceModeAllowsAI()) {
     speak(`${sayNames} 同学，请到「${page.place}」` + (page.from ? `，找 ${page.from}` : '') + (page.note ? `，${page.note}` : ''));
