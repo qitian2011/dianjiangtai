@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>点将台 · 下载中心</title>
+<link rel="stylesheet" href="style.css?v=35">
+<script src="theme.js?v=35"></script>
+</head>
+<body>
+<div class="dl-wrap">
+
+  <div class="dl-head">
+    <a class="dl-back" id="backBtn" href="screen.html">← 返回</a>
+    <div>
+      <div class="dl-title">⬇ 下载中心</div>
+      <div class="dl-sub">课堂互动「点将台」· 客户端与资料下载</div>
+    </div>
+  </div>
+
+  <div id="dlList"></div>
+
+  <div class="dl-tip">
+    <b>🌐 不想安装？</b>直接用浏览器打开
+    <a href="https://qitian.dpdns.org/ctrl.html">qitian.dpdns.org/ctrl.html</a>（教师控制端）或
+    <a href="https://qitian.dpdns.org/screen.html">…/screen.html</a>（大屏端），手机、平板、电脑都能用，数据实时同步。<br>
+    <b>💻 什么是桌面版？</b>Windows 绿色客户端：双击即用，<b>托盘常驻 + 系统通知</b>（传呼/叫人弹右下角通知），断网自动重试。
+    适合常驻教室电脑、把班级机/办公室电脑固定成「点将台专用机」的场景。
+  </div>
+  <div class="dl-state-note" id="stateNote"></div>
+</div>
+
+<script>
+/* ============================================================
+ * 下载中心 · 数据与交互
+ * 1) 列表由 DL 数组驱动（改这里即可增删下载项，无需动结构）
+ * 2) 每项下载前先 HEAD 探测：存在 → 亮「下载」；不存在 → 灰「待上架」
+ *    （本页为静态页，探测在浏览器内进行，服务器零成本）
+ * 3) 触发下载：同源小文件直接跳转；GitHub 大文件走新标签（由浏览器接管下载）
+ * ============================================================ */
+var DL = [
+  {
+    id: 'exe', icon: '🖥️', name: '桌面版 · 单文件版', badge: '推荐',
+    os: 'Windows 10/11 · 64 位', size: '约 71 MB', ver: 'v1.1.1',
+    desc: '绿色单文件，双击即用，适合拷 U 盘 / 发给同事。v1.1 新增开机自启动（控制端/大屏端可选）；v1.1.1 修复普通权限双击无反应，无需以管理员运行。',
+    url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Desktop.exe'
+  },
+  {
+    id: 'zip', icon: '📦', name: '桌面版 · 便携版',
+    os: 'Windows 10/11 · 64 位', size: '约 108 MB', ver: 'v1.1.1',
+    desc: 'Zip 压缩包，解压后双击 exe 即用。v1.1 新增开机自启动（控制端/大屏端可选）；v1.1.1 修复普通权限双击无反应。文件图标与运行时图标均为「点」图标。',
+    url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Portable.zip'
+  },
+  {
+    id: 'doc', icon: '📄', name: '使用说明', badge: '必备',
+    os: '通用', size: '约 4 KB',
+    desc: '安装、功能一览、常见问题（未签名提示 / 通知设置 / 大屏全屏退出 / 运行不了排查）。',
+    url: '使用说明.txt'
+  }
+];
+
+var box = document.getElementById('dlList');
+var stateNote = document.getElementById('stateNote');
+
+function el(tag, cls, html) {
+  var d = document.createElement(tag);
+  if (cls) d.className = cls;
+  if (html != null) d.innerHTML = html;
+  return d;
+}
+
+/* 渲染一个下载卡片 */
+function renderItem(it) {
+  var card = el('div', 'dl-card');
+  card.appendChild(el('div', 'dl-ico', it.icon));
+
+  var info = el('div', 'dl-info');
+  var nm = el('div', 'dl-name', it.name + (it.ver ? ' <span style="color:var(--dim);font-weight:600">' + it.ver + '</span>' : ''));
+  if (it.badge) nm.appendChild(el('span', 'dl-badge', it.badge));
+  info.appendChild(nm);
+  info.appendChild(el('div', 'dl-meta',
+    '<span class="os">' + (it.os || '') + '</span><span>' + (it.size || '') + '</span>'));
+  info.appendChild(el('div', 'dl-desc', it.desc));
+  card.appendChild(info);
+
+  // 下载按钮：探测成功前统一为“检查中”
+  var go = el('a', 'dl-go', '⏳ 检查中…');
+  go.href = it.url.indexOf('://') < 0 ? encodeURI(it.url) : it.url;  // 同源中文文件名先做百分号编码
+  go.target = '_blank';
+  go.rel = 'noopener';
+  card.appendChild(go);
+  box.appendChild(card);
+  return go;
+}
+
+/* HEAD 探测：URL 真实可用才亮“下载”，避免点了 404 */
+function probe(it, go) {
+  var done = false;
+  var finish = function () { if (!done) { done = true; go.textContent = '⏳ 待上架'; go.classList.add('miss'); } };
+
+  // 同源文件（使用说明）必在 → 直接亮起
+  if (it.url.indexOf('://') < 0) { go.textContent = '⬇ 下载'; go.classList.add('ready'); stateNote.innerHTML = '「使用说明」可直接下载 ✅'; return; }
+
+  var t = setTimeout(finish, 6000);            // 6 秒探测超时 → 保守置灰
+  try {
+    fetch(it.url, { method: 'HEAD', mode: 'cors', redirect: 'follow' }).then(function (r) {
+      clearTimeout(t);
+      if (r.ok) { go.textContent = '⬇ 下载'; go.classList.add('ready'); }
+      else { finish(); }
+    }).catch(function () {
+      clearTimeout(t);
+      // 探测失败（网络/墙）→ 仍给出下载入口，点了由浏览器处理
+      go.textContent = '⬇ 下载';
+      go.classList.add('ready');
+    });
+  } catch (e) { clearTimeout(t); finish(); }
+}
+
+DL.forEach(function (it) {
+  var go = renderItem(it);
+  probe(it, go);
+});
+
+/* 返回：有历史则回退（控制端/大屏跳来），否则回大屏首页 */
+document.getElementById('backBtn').addEventListener('click', function (e) {
+  if (history.length > 1) { e.preventDefault(); history.back(); }
+});
+</script>
+</body>
+</html>
