@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=32">
-<script src="theme.js?v=32"></script>
+<link rel="stylesheet" href="style.css?v=33">
+<script src="theme.js?v=33"></script>
 </head>
 <body>
 <div class="ctrl-wrap">
@@ -238,6 +238,11 @@
       <div style="font-size:13px; color:var(--dim); margin-top:8px">关闭后大屏只显示公告，不显示课表（按班级保存）</div>
     </div>
     <div class="card">
+      <h3>⏰ 上课自动考试模式</h3>
+      <label class="switch"><input type="checkbox" id="autoExamChk" checked> 按课表：上课时间自动开启考试模式</label>
+      <div style="font-size:13px; color:var(--dim); margin-top:8px">工作日上课时段（每节课时间配全了开始/下课时间的节次）自动开启考试模式，下课自动恢复。<b>考试模式下传呼不弹大窗、不发声</b>，只在右下角小字提示。若本节课不考试，请先关闭此总开关再手动使用（按班级保存）</div>
+    </div>
+    <div class="card">
       <h3>大屏提示方式（点名结果 / 传呼 / 答题计时）</h3>
       <div class="count-select" id="voiceChips">
         <span class="chip sel" data-m="sound">🔔 仅提示音</span><span class="chip" data-m="ai">🗣️ 仅AI播报</span><span class="chip" data-m="both">🔔+🗣️ 都要</span>
@@ -293,6 +298,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=32"></script>
+<script src="ctrl.js?v=33"></script>
 </body>
 </html>
