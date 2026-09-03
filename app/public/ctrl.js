@@ -1,6 +1,6 @@
 /* 教师控制端逻辑 */
 let S = null;
-let selGroup = null, selCount = 1, selTimer = 60, selDur = 30;
+let selGroup = null, selCount = 1, selTimer = 60;
 let pageSel = [], selPlace = null;   // pageSel: [{n:姓名, s:学号}]，以学号定位防同名
 let lockRoll = false;
 const $ = id => document.getElementById(id);
@@ -79,17 +79,24 @@ function render() {
   // 分组chips（组由名单页自定义，无组时只显示"全班"）
   $('groupChips').innerHTML = `<span class="chip ${selGroup ? '' : 'sel'}" data-g="">全班</span>` +
     (S.groups || []).map(g => `<span class="chip ${selGroup === g ? 'sel' : ''}" data-g="${g}">${g}</span>`).join('');
-  // 点名结果卡（显示带组名的名字）
-  const showResult = S.lastPick && !S.answering;
-  $('pickResult').style.display = showResult ? '' : 'none';
-  if (showResult) {
-    $('pickNames').textContent = (S.lastPick.display || S.lastPick.names).join('  ');
-    const answered = !!(S.lessonLog.length && !lockRoll);
-    $('answerBtns').style.display = '';
+  // 点名结果卡（显示带组名的名字）。注意：答题进行中也必须保持显示——
+  // 倒计时与「答对/答错」判定按钮都在这一张卡里查看与操作，不能隐藏
+  $('pickResult').style.display = S.lastPick ? '' : 'none';
+  $('pickNames').textContent = S.lastPick ? (S.lastPick.display || S.lastPick.names).join('  ') : '';
+  if (S.answering) {
+    // 答题中：隐藏提问/计时选择，展示 倒计时 + 答对/答错/未答 判定
+    $('answerBtns').style.display = 'none';
     $('timerBtns').style.display = 'none';
+    $('markBtns').style.display = '';
+    startPickCd(S.answering.deadline);
+  } else {
+    // 非答题：收起倒计时与判定
     $('markBtns').style.display = 'none';
+    stopPickCd();
+    $('pickCdLine').style.display = 'none';
+    if (S.lastPick) { $('answerBtns').style.display = ''; $('timerBtns').style.display = 'none'; }
+    else $('answerBtns').style.display = 'none';
   }
-  if (S.answering) { $('answerBtns').style.display = 'none'; $('markBtns').style.display = ''; $('timerBtns').style.display = 'none'; }
   $('rollBtn').disabled = lockRoll || !!S.answering;
   // 今日请假（点名自动跳过）
   const absent = S.absentToday || [];
@@ -157,6 +164,38 @@ function render() {
   $('showTtChk').checked = S.showTt !== false;
   // 大屏作业栏（备忘录）显示开关
   $('showMemosChk').checked = !!S.showMemos;
+}
+
+/* ---------- 点名答题倒计时（控制端卡片内，按服务器 deadline 本地 tick，与大屏同步） ---------- */
+let pickCdT = null;
+function stopPickCd() { if (pickCdT) { clearInterval(pickCdT); pickCdT = null; } }
+function startPickCd(deadline) {
+  const line = $('pickCdLine'), num = $('pickCd'), tag = $('pickCdTag');
+  line.style.display = '';
+  stopPickCd();
+  const setOver = () => {
+    num.textContent = '时间到';
+    num.className = 'pick-cd over';
+    tag.textContent = '请判定（超时未答请点「未答」）';
+    tag.className = 'pick-cd-tag';
+  };
+  if (!deadline) {   // 0 = 不限时
+    num.textContent = '∞';
+    num.className = 'pick-cd';
+    tag.textContent = '不限时 · 答完即可判定';
+    tag.className = 'pick-cd-tag';
+    return;
+  }
+  const upd = () => {
+    const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+    if (left <= 0) { stopPickCd(); setOver(); return; }
+    num.textContent = left;
+    num.className = 'pick-cd' + (left <= 10 ? ' low' : '');
+    tag.textContent = left <= 10 ? '即将结束…' : '答题倒计时';
+    tag.className = 'pick-cd-tag';
+  };
+  upd();
+  pickCdT = setInterval(upd, 500);
 }
 
 function syncChips(containerId, attr, val) {
@@ -229,26 +268,12 @@ $('pageStudents').addEventListener('click', e => {
 });
 $('placeChips').addEventListener('click', e => { if (e.target.dataset.p) { selPlace = e.target.dataset.p; render(); } });
 $('addPlaceBtn').onclick = () => { const v = $('newPlace').value.trim(); if (v) { cmd({ action: 'addPlace', name: v }); $('newPlace').value = ''; selPlace = v; } };
-$('durChips').addEventListener('click', e => {
-  if (e.target.dataset.d !== undefined) {
-    selDur = +e.target.dataset.d;
-    $('durCustom').value = '';
-    syncChips('durChips', 'd', e.target.dataset.d);
-  }
-});
-// 自定义显示时长（秒）：0~3600，0=常驻
-$('durCustom').addEventListener('change', e => {
-  const v = parseInt(e.target.value, 10);
-  if (isNaN(v) || v < 0 || v > 3600) { toast('请输入 0~3600 的秒数'); $('durCustom').value = ''; return; }
-  selDur = v;
-  document.querySelectorAll('#durChips .chip').forEach(c => c.classList.remove('sel'));
-  $('durCustom').placeholder = v === 0 ? '0=常驻' : `当前：${v} 秒`;
-});
+// 大屏居中弹窗展示时长已固定为 5 秒（大屏端自动收起），控制端不再提供显示时长选项
 $('pageBtn').onclick = async () => {
   if (pageSel.length === 0) return toast('请先选择学生');
   if (!selPlace) return toast('请选择去处');
   localStorage.setItem('teacherName', $('fromInput').value.trim());
-  await cmd({ action: 'page', names: pageSel.map(x => x.n), sids: pageSel.map(x => x.s), place: selPlace, from: $('fromInput').value.trim(), note: $('noteInput').value.trim(), duration: selDur });
+  await cmd({ action: 'page', names: pageSel.map(x => x.n), sids: pageSel.map(x => x.s), place: selPlace, from: $('fromInput').value.trim(), note: $('noteInput').value.trim() });
   pageSel = []; $('noteInput').value = ''; render();
 };
 $('confirmBtn').onclick = () => cmd({ action: 'pageConfirm' });

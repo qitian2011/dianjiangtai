@@ -475,7 +475,7 @@ export class Room {
           names, sids, place: String(body.place || '办公室').slice(0, 20),
           from: String(body.from || '').slice(0, 20),
           note: String(body.note || '').slice(0, 30),
-          duration: (Number.isFinite(+body.duration) && +body.duration >= 0 && +body.duration <= 3600) ? (+body.duration | 0) : 30,
+          // 展示时长已固定：大屏端居中弹窗统一展示 5 秒后自动收起（不再由控制端配置）
           sentAt: now, confirmed: false, retracted: false
         };
         session.pageLog.push({ names, sids, place: session.page.place, from: session.page.from, sentAt: now, confirmed: false, retracted: false });

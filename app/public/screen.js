@@ -349,6 +349,9 @@ function showMark(result) {
 }
 
 /* ---------- 传呼 ---------- */
+let lastPageSoundAt = 0;
+let pageOverlayShownAt = 0;    // 当前弹窗对应的 page.sentAt（0=未弹窗）；同一次传呼不重复弹
+let pageOverlayT = null;       // 5 秒自动收起定时器
 function showPage(page) {
   if (!page || page.retracted || page.confirmed) { hidePage(); return; }
   // 显示：姓名·学号（有学号时），便于确认身份；AI 播报仍喊姓名
@@ -358,9 +361,21 @@ function showPage(page) {
   $('pPlace').textContent = `请到「${page.place}」` + (page.from ? ` 找 ${page.from}` : '');
   $('pNote').textContent = page.note || '';
   $('pFrom').textContent = '请看到通知后及时前往';
-  // 大弹窗居中常驻，直到教师端「已到 / 撤回」才消失
-  if (S && S.examMode) { /* 考试模式只显示角落条，不弹卡不发声 */ return; }
-  $('pageOverlay').style.display = '';
+  // 考试模式只显示角落条，不弹卡不发声
+  if (S && S.examMode) { clearTimeout(pageOverlayT); pageOverlayShownAt = 0; $('pageOverlay').style.display = 'none'; return; }
+  const isNewPage = page.sentAt !== pageOverlayShownAt;
+  if (isNewPage) {
+    pageOverlayShownAt = page.sentAt;
+    $('pageOverlay').style.display = '';
+    // 展示时长固定 5 秒：超时自动收起居中大弹窗（右下角堆叠仍保留，等教师「已到/撤回」）
+    clearTimeout(pageOverlayT);
+    pageOverlayT = setTimeout(() => {
+      const cur = S && S.page;
+      if (!(cur && cur.sentAt === pageOverlayShownAt && !cur.retracted && !cur.confirmed)) return;
+      $('pageOverlay').style.display = 'none';
+      pageOverlayShownAt = 0;   // 重置：后续同 page 的 state 推送不会再把它弹开
+    }, 5000);
+  }
   if (lastPageSoundAt === page.sentAt) return;   // 同一传呼只播一次提示音/AI 语音
   lastPageSoundAt = page.sentAt;
   sfx.page();
@@ -370,13 +385,13 @@ function showPage(page) {
   }
 }
 function hidePage() {
+  clearTimeout(pageOverlayT); pageOverlayT = null;
+  pageOverlayShownAt = 0;
   $('pageOverlay').style.display = 'none';
   $('pageBanner').style.display = 'none';
 }
 
 /* ---------- 渲染 ---------- */
-let lastPageKey = '';
-let lastPageSoundAt = 0;
 function render() {
   if (!S) return;
   // 班级密码锁定：显示锁定画面（可在此输密码，或等待控制端解锁）
@@ -451,15 +466,13 @@ function render() {
   } else {
     view('standby');
   }
-  // 传呼：只要未确认/未撤回，大屏就显示居中大弹窗；showPage 内部保证同一传呼只播一次音
+  // 传呼：未确认/未撤回时大屏显示居中弹窗，新传呼展示 5 秒自动收起；
+  // showPage/hidePage 内部控制弹窗开关与提示音，同一传呼只播一次
   const p = S.page;
-  const key = p ? p.sentAt : '';
   if (p && !p.retracted && !p.confirmed) {
-    lastPageKey = key;
     showPage(p);
   } else {
     // 已确认 / 已撤回 / 无传呼：一律收起弹窗
-    lastPageKey = key;
     hidePage();
   }
   // 考试模式
