@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>点将台 · 下载中心</title>
-<link rel="stylesheet" href="style.css?v=35">
-<script src="theme.js?v=35"></script>
+<link rel="stylesheet" href="style.css?v=36">
+<script src="theme.js?v=36"></script>
 </head>
 <body>
 <div class="dl-wrap">
@@ -38,28 +38,30 @@
  *    （本页为静态页，探测在浏览器内进行，服务器零成本）
  * 3) 触发下载：同源小文件直接跳转；GitHub 大文件走新标签（由浏览器接管下载）
  * ============================================================ */
+var DJT_VER = { ctrl: 'v2.0.1', screen: 'v2.0.2' };   // ⚠️ 发版时统一改此处（P1-9 修复：版本单一来源，与 Release 资产保持一致）
+
 var DL = [
   {
     id: 'ctrl-exe', icon: '🎛️', name: '点将台-控制端（单文件版）', badge: '教师端',
-    os: 'Windows 10/11 · 64 位', size: '约 71 MB', ver: 'v2.0.0',
-    desc: '教师控制窗口：班级管理/点名/传呼/设置/开机自启。v2.0.0 拆分为独立 App；启动需管理员权限，双击弹 UAC 提权。',
+    os: 'Windows 10/11 · 64 位', size: '约 71 MB', ver: DJT_VER.ctrl,
+    desc: '教师控制窗口：班级管理/点名/传呼/设置/开机自启。v2.0.1 修复开机自启失效与大屏端自启模式；启动需管理员权限，双击弹 UAC 提权。',
     url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Ctrl.exe'
   },
   {
     id: 'ctrl-zip', icon: '📦', name: '点将台-控制端（便携版）',
-    os: 'Windows 10/11 · 64 位', size: '约 103 MB', ver: 'v2.0.0',
+    os: 'Windows 10/11 · 64 位', size: '约 103 MB', ver: DJT_VER.ctrl,
     desc: '控制端 zip 压缩包：解压后双击「点将台-控制端.exe」即用。教师控制窗口（班级/点名/传呼/设置/开机自启）。',
     url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Ctrl.zip'
   },
   {
     id: 'screen-exe', icon: '📺', name: '点将台-大屏端（单文件版）', badge: '教室大屏',
-    os: 'Windows 10/11 · 64 位', size: '约 71 MB', ver: 'v2.0.0',
-    desc: '教室大屏展示窗口：接收控制端传呼/系统通知+任务栏闪/AI 播报。v2.0.0 拆分为独立 App；关闭按钮 = 退到托盘保 SSE 连接。',
+    os: 'Windows 10/11 · 64 位', size: '约 71 MB', ver: DJT_VER.screen,
+    desc: '教室大屏展示窗口：接收控制端传呼/系统通知+任务栏闪/AI 播报。v2.0.2 安全加固（IPC 白名单/外链转浏览器/防息屏）；关闭按钮 = 退到托盘保 SSE 连接。',
     url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Screen.exe'
   },
   {
     id: 'screen-zip', icon: '📦', name: '点将台-大屏端（便携版）',
-    os: 'Windows 10/11 · 64 位', size: '约 103 MB', ver: 'v2.0.0',
+    os: 'Windows 10/11 · 64 位', size: '约 103 MB', ver: DJT_VER.screen,
     desc: '大屏端 zip 压缩包：解压后双击「点将台-大屏端.exe」即用。教室大屏展示（接收传呼/退托盘保 SSE）。',
     url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Screen.zip'
   },
