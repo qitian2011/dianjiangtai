@@ -754,7 +754,9 @@ function handleCmd(body, res, roomId, sid = '') {
 }
 
 /* ---------------- HTTP 服务 ---------------- */
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
+// 文本类资源加 Content-Disposition：中文文件名 RFC 5987 编码 + 浏览器内联展示（不触发下载弹窗），避免乱码
+const TEXT_EXT_FOR_DISPOSITION = new Set(['.txt', '.md', '.json', '.html', '.js', '.css']);
 function readBody(req) {
   return new Promise((resolve) => {
     let d = '';
@@ -788,7 +790,15 @@ const server = http.createServer(async (req, res) => {
   if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('404 Not Found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
+    const ext = path.extname(file).toLowerCase();
+    const ct = MIME[ext] || 'application/octet-stream';
+    const headers = { 'Content-Type': ct, 'Cache-Control': 'no-cache' };
+    if (TEXT_EXT_FOR_DISPOSITION.has(ext)) {
+      const baseName = path.basename(file);
+      const enc = encodeURIComponent(baseName).replace(/['()]/g, escape).replace(/\*/g, '%2A');
+      headers['Content-Disposition'] = `inline; filename="${baseName.replace(/[\r\n"]/g, '_')}"; filename*=UTF-8''${enc}`;
+    }
+    res.writeHead(200, headers);
     res.end(data);
   });
 });
