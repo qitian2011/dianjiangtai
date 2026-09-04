@@ -75,10 +75,10 @@ function render() {
   if (S.locked) { showLock(); return; }
   hideLock();
   // 班级选择
-  $('classSel').innerHTML = S.allClasses.map(c => `<option value="${c.i}" ${c.i === S.currentClass ? 'selected' : ''}>${c.locked ? '🔒 ' : ''}${c.name}</option>`).join('');
+  $('classSel').innerHTML = S.allClasses.map(c => `<option value="${c.i}" ${c.i === S.currentClass ? 'selected' : ''}>${c.locked ? '🔒 ' : ''}${esc(c.name)}</option>`).join('');
   // 分组chips（组由名单页自定义，无组时只显示"全班"）
   $('groupChips').innerHTML = `<span class="chip ${selGroup ? '' : 'sel'}" data-g="">全班</span>` +
-    (S.groups || []).map(g => `<span class="chip ${selGroup === g ? 'sel' : ''}" data-g="${g}">${g}</span>`).join('');
+    (S.groups || []).map(g => `<span class="chip ${selGroup === g ? 'sel' : ''}" data-g="${esc(g)}">${esc(g)}</span>`).join('');
   // 点名结果卡（显示带组名的名字）。注意：答题进行中也必须保持显示——
   // 倒计时与「答对/答错」判定按钮都在这一张卡里查看与操作，不能隐藏
   $('pickResult').style.display = S.lastPick ? '' : 'none';
@@ -106,22 +106,22 @@ function render() {
     ? `请假中：${absent.join('、')}（抽取时自动跳过）`
     : '无请假，全员参与抽取';
   $('absentEdit').innerHTML = S.students.map(s =>
-    `<span class="chip ${absent.includes(s.name) ? 'sel' : ''}" data-a="${s.name}">${s.name}</span>`).join('')
+    `<span class="chip ${absent.includes(s.name) ? 'sel' : ''}" data-a="${esc(s.name)}">${esc(s.name)}</span>`).join('')
     || '<span style="color:var(--dim)">名单为空</span>';
   // 本节课记录（判定结果随行显示：✅答对 / ❌答错 / ⏳未答 / ⏭跳过）
   const RES = { right: ['✅答对', '#2f9e44'], wrong: ['❌答错', '#e03131'], none: ['⏳未答', '#868e96'], skip: ['⏭跳过', '#868e96'] };
   $('lessonList').innerHTML = S.lessonLog.length
     ? S.lessonLog.map(l => {
       const r = RES[l.result];
-      return `<li><b>${(l.display || l.names).join('、')}</b><span>${r ? `<i style="color:${r[1]};font-style:normal;margin-right:6px">${r[0]}</i>` : ''}${timeStr(l.at)}</span></li>`;
+      return `<li><b>${esc((l.display || l.names).join('、'))}</b><span>${r ? `<i style="color:${r[1]};font-style:normal;margin-right:6px">${r[0]}</i>` : ''}${timeStr(l.at)}</span></li>`;
     }).join('') : '<li>暂无</li>';
   // 传呼候选学生（姓名+学号；有学号显示学号、无学号显示组别，搜索姓名/学号均可）
   const kw = $('stuSearch').value.trim();
   $('pageStudents').innerHTML = S.students
     .filter(s => !kw || s.name.includes(kw) || (s.sid || '').includes(kw))
-    .map(s => `<span class="chip ${pageSel.some(x => x.n === s.name) ? 'sel' : ''}" data-n="${s.name}" data-s="${s.sid || ''}">${s.name}${s.sid ? '·' + s.sid : (s.group ? '·' + s.group : '')}</span>`).join('') || '<span style="color:var(--dim)">无匹配学生</span>';
+    .map(s => `<span class="chip ${pageSel.some(x => x.n === s.name) ? 'sel' : ''}" data-n="${esc(s.name)}" data-s="${esc(s.sid || '')}">${esc(s.name)}${s.sid ? '·' + esc(s.sid) : (s.group ? '·' + esc(s.group) : '')}</span>`).join('') || '<span style="color:var(--dim)">无匹配学生</span>';
   // 去处
-  $('placeChips').innerHTML = S.places.map(p => `<span class="chip ${selPlace === p ? 'sel' : ''}" data-p="${p}">${p}</span>`).join('');
+  $('placeChips').innerHTML = S.places.map(p => `<span class="chip ${selPlace === p ? 'sel' : ''}" data-p="${esc(p)}">${esc(p)}</span>`).join('');
   $('fromInput').value = localStorage.getItem('teacherName') || $('fromInput').value;
   // 当前传呼（姓名·学号）
   const p = S.page;
@@ -132,18 +132,18 @@ function render() {
   }
   // 传呼记录
   $('pageLogList').innerHTML = S.pageLog.length
-    ? S.pageLog.slice().reverse().map(l => `<li><b>${(l.names || []).map((n, i) => l.sids && l.sids[i] ? `${n}·${l.sids[i]}` : n).join('、')}→${l.place}</b><span>${timeStr(l.sentAt)} ${l.confirmed ? '✅' : (l.retracted ? '撤回' : '…')}</span></li>`).join('') : '<li>暂无</li>';
+    ? S.pageLog.slice().reverse().map(l => `<li><b>${esc((l.names || []).map((n, i) => l.sids && l.sids[i] ? `${n}·${l.sids[i]}` : n).join('、'))}→${esc(l.place)}</b><span>${timeStr(l.sentAt)} ${l.confirmed ? '✅' : (l.retracted ? '撤回' : '…')}</span></li>`).join('') : '<li>暂无</li>';
   // 名单（学号/组别旁直接改：权重 0=今天不点他，1=正常，2=双倍概率…；📌=加入今日请假）
   const absNow = S.absentToday || [];
   $('stuList').innerHTML = S.students.map(s => {
     const isAbs = absNow.includes(s.name);
-    return `<div class="stu-item"><span class="nm">${s.name}${isAbs ? ' <span style="color:#ff5d5d;font-size:12px">📌请假</span>' : ''}</span><span class="meta">学号</span><input type="text" inputmode="numeric" value="${s.sid || ''}" data-sid="${s.name}" title="学号" style="width:86px"><span class="meta">${s.group || '未分组'} · 被点${s.pickedCount}次</span><span class="meta">权重</span><input type="text" inputmode="decimal" pattern="[0-9.]*" value="${s.weight}" data-w="${s.name}" title="0=不点他，1=正常，2=双倍概率"><span class="del" data-a="${s.name}" style="${isAbs ? 'color:#ff5d5d' : ''}">📌</span><span class="del" data-n="${s.name}">×</span></div>`;
+    return `<div class="stu-item"><span class="nm">${esc(s.name)}${isAbs ? ' <span style="color:#ff5d5d;font-size:12px">📌请假</span>' : ''}</span><span class="meta">学号</span><input type="text" inputmode="numeric" value="${esc(s.sid || '')}" data-sid="${esc(s.name)}" title="学号" style="width:86px"><span class="meta">${esc(s.group || '未分组')} · 被点${s.pickedCount}次</span><span class="meta">权重</span><input type="text" inputmode="decimal" pattern="[0-9.]*" value="${esc(s.weight)}" data-w="${esc(s.name)}" title="0=不点他，1=正常，2=双倍概率"><span class="del" data-a="${esc(s.name)}" style="${isAbs ? 'color:#ff5d5d' : ''}">📌</span><span class="del" data-n="${esc(s.name)}">×</span></div>`;
   }).join('') || '<div style="color:var(--dim)">名单为空，请导入</div>';
   // 组管理（自定义组，点 × 删组）
   $('groupManage').innerHTML = (S.groups || []).length
-    ? S.groups.map(g => `<span class="chip">${g}<span class="del" data-g="${g}" style="color:var(--red);margin-left:6px;cursor:pointer">×</span></span>`).join('')
+    ? S.groups.map(g => `<span class="chip">${esc(g)}<span class="del" data-g="${esc(g)}" style="color:var(--red);margin-left:6px;cursor:pointer">×</span></span>`).join('')
     : '<span style="color:var(--dim)">暂无分组，可在下方添加（不分组也完全可以正常点名）</span>';
-  $('groupDatalist').innerHTML = (S.groups || []).map(g => `<option value="${g}">`).join('');
+  $('groupDatalist').innerHTML = (S.groups || []).map(g => `<option value="${esc(g)}">`).join('');
   // 课表
   renderTt();
   // 公告栏（输入中不被状态刷新覆盖）
@@ -326,7 +326,8 @@ $('resetStatsBtn').onclick = () => cmd({ action: 'resetStats' });
 
 /* ---------- 课表（按班级保存） ---------- */
 const TT_DAYS = ['周一', '周二', '周三', '周四', '周五'];
-function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+// HTML 全量转义（P0-2 XSS 修复）：& < > " ' 五项全转，可同时用于文本节点与双引号属性
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 function renderTt() {
   const tt = S.tt || { am: 4, pm: 3, cells: {} };
   $('ttAmVal').textContent = tt.am; $('ttPmVal').textContent = tt.pm;
