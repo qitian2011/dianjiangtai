@@ -1,0 +1,29 @@
+# 点将台 Cloudflare Workers 静态资源响应头配置
+# 路径匹配规则：Glob 模式（CF Pages / Workers assets 均支持）
+# 优先级：_headers 配置 > 内置 MIME 表
+
+# 中文文本资源：强制 UTF-8 + 内联展示（避免中文乱码与浏览器当下载）
+/使用说明.txt
+  Content-Type: text/plain; charset=utf-8
+  Content-Disposition: inline; filename="使用说明.txt"
+  Cache-Control: no-cache
+
+/*.txt
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: no-cache
+
+/*.md
+  Content-Type: text/markdown; charset=utf-8
+  Cache-Control: no-cache
+
+/*.json
+  Content-Type: application/json; charset=utf-8
+  Cache-Control: no-cache
+
+/*.js
+  Content-Type: text/javascript; charset=utf-8
+  Cache-Control: no-cache
+
+/*.css
+  Content-Type: text/css; charset=utf-8
+  Cache-Control: no-cache
