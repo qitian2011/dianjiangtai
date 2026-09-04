@@ -106,6 +106,51 @@ function autoInClass(tt) {
   }
   return false;
 }
+/* ============================================================
+ * 安全与健壮性工具（v2.0.2 安全加固 2026-09-04）
+ * ⚠️ 本文件与 server.js 是双份业务实现：改这里必须同步改 server.js！
+ * ============================================================ */
+// 存储层清洗：剔除 HTML 特殊字符与控制字符（源头防 XSS，与前端转义双保险，P0-2）
+function sanitize(s) {
+  return String(s == null ? '' : s)
+    .replace(/[<>"'&`]/g, '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim();
+}
+// 班级密码哈希（SHA-256，盐=固定前缀+班级rid）：不再明文存储/比对（P1-7）
+const PASS_SALT = 'djt::v2::';
+async function sha256hex(s) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+function hasPass(cls) {
+  if (!cls) return false;
+  return !!(cls.passHash || cls.pass);   // 兼容旧明文数据
+}
+async function checkClassPass(cls, rid, input) {
+  if (!cls || !hasPass(cls)) return true;
+  if (cls.passHash) return (await sha256hex(PASS_SALT + rid + '::' + String(input || ''))) === cls.passHash;
+  return String(input || '') === String(cls.pass);   // 旧明文数据兼容路径
+}
+// 密码尝试限速（防在线暴破）：失败 5 次锁 30 秒（解锁/切班/删班共用计数）
+function lockGuard(session) {
+  const f = session.unlockFail || (session.unlockFail = { n: 0, until: 0 });
+  return Date.now() < f.until ? '尝试次数过多，请 30 秒后再试' : null;
+}
+function markFail(session) {
+  const f = session.unlockFail || (session.unlockFail = { n: 0, until: 0 });
+  f.n++;
+  if (f.n >= 5) { f.n = 0; f.until = Date.now() + 30000; }
+}
+function markOk(session) { const f = session.unlockFail; if (f) f.n = 0; }
+// 日志硬上限：内存只保留最近 N 条（P1-1：防单房间高频操作无限堆积）
+function logPush(arr, entry, cap = 200) {
+  arr.push(entry);
+  if (arr.length > cap) arr.splice(0, arr.length - cap);
+}
+// 点名动画互斥：窗口期不响应新点名/跳过；resetRound/切班等 bump gen 令在途定时器失效（P0-3）
+function bumpGen(session) { session.gen = (session.gen || 0) + 1; session.rolling = false; }
+
 // 把点名判定结果写回「本节课记录」中对应轮次（尾向找第一条未标记且包含这些名字的记录）
 function tagLessonLog(session, names, result) {
   const log = session.lessonLog;
@@ -163,6 +208,13 @@ export class Room {
     if (!roster) roster = defaultRoster();
     roster.classes.forEach(normalizeClass);
     roster.classes.forEach((c, i) => { if (!c.rid) c.rid = this.genRid(c.name || '', i); });
+    // 旧明文密码一次性迁移为哈希（P1-7）
+    let migrated = false;
+    for (const c of roster.classes) if (c.pass && !c.passHash) {
+      c.passHash = await sha256hex(PASS_SALT + c.rid + '::' + c.pass);
+      delete c.pass; migrated = true;
+    }
+    if (migrated) await this.state.storage.put('roster', roster);
     this.roster = roster;
   }
   // 班级实例初始化：优先读自身存储；没有则从主实例引导迁移（老部署名单都在 main 里）
@@ -179,10 +231,16 @@ export class Room {
     }
     if (!cls) { this.invalid = true; return; }
     this.cls = normalizeClass(cls);
+    // 旧明文密码一次性迁移为哈希（P1-7）
+    if (this.cls.pass && !this.cls.passHash) {
+      this.cls.passHash = await sha256hex(PASS_SALT + this.cls.rid + '::' + this.cls.pass);
+      delete this.cls.pass;
+      await this.state.storage.put('cls', this.cls);
+    }
     if (!Array.isArray(places)) places = ['办公室', '教务处', '医务室', '自习室'];
     // 迷你 roster：复用全部班级本地指令逻辑（classes 恒为本班）
     this.roster = { classes: [this.cls], places, currentClass: 0 };
-    this.dir = [{ i: 0, name: this.cls.name, rid: this.cls.rid, locked: !!this.cls.pass }];
+    this.dir = [{ i: 0, name: this.cls.name, rid: this.cls.rid, locked: hasPass(this.cls) }];
     await this.refreshDir();
   }
   // 从主实例刷新班级目录（班级下拉/切换用）+ 共享去处列表
@@ -194,7 +252,7 @@ export class Room {
       if (d && Array.isArray(d.classes) && d.classes.length) {
         this.dir = d.classes;
         const mine = this.dir.find(c => c.rid === this.selfId);
-        if (mine) { mine.locked = !!this.cls.pass; }
+        if (mine) { mine.locked = hasPass(this.cls); }
         if (Array.isArray(d.places) && d.places.length) this.roster.places = d.places;
       }
     } catch (e) { /* 失败时沿用缓存 */ }
@@ -261,7 +319,10 @@ export class Room {
         animationMs: p.animationMs !== undefined ? p.animationMs : 3000,
         rollStyle: 'classic',
         voiceMode: p.voiceMode !== undefined ? p.voiceMode : 'sound',
-        lessonLog: [], pageLog: [], unlocked: {}
+        lessonLog: [], pageLog: [], unlocked: {},
+        rolling: false,      // 点名动画互斥标志（P0-3）
+        gen: 0,              // 会话代次：resetRound/切班/删班 bump 后，在途动画回调自动失效
+        unlockFail: null     // 密码暴破限速计数 {n, until}（P1-7）
       });
     }
     return this.rooms.get(id);
@@ -286,15 +347,15 @@ export class Room {
   isLocked(roomId, sid) {
     const room = this.getRoom(roomId);
     const cls = this.roster.classes[this.roomClassIndex(roomId, room)];
-    return !!(cls && cls.pass && !(sid && room.unlocked[sid + ':' + cls.rid]));
+    return !!(cls && hasPass(cls) && !(sid && room.unlocked[sid + ':' + cls.rid]));
   }
   snapshot(roomId, sid = '') {
     const room = this.getRoom(roomId);
     const cls = this.roster.classes[this.roomClassIndex(roomId, room)] || { name: '', students: [] };
     // 班级目录：主实例实时生成；班级实例用缓存目录（i = 主实例中的下标，前端切班用）
     const allClasses = this.mode === 'class'
-      ? (this.dir || [{ i: 0, name: cls.name, rid: roomId, locked: !!cls.pass }]).map(c => ({ ...c }))
-      : this.roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass }));
+      ? (this.dir || [{ i: 0, name: cls.name, rid: roomId, locked: hasPass(cls) }]).map(c => ({ ...c }))
+      : this.roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: hasPass(c) }));
     const curIdx = this.roomClassIndex(roomId, room);
     const dirIdx = allClasses.findIndex(c => this.mode === 'class' ? c.rid === roomId : c.i === curIdx);
     const currentClass = dirIdx >= 0 ? allClasses[dirIdx].i : curIdx;
@@ -444,7 +505,7 @@ export class Room {
     // 班级密码门禁：本标签页未解锁时只放行 unlockClass，其余指令一律拒绝。
     // 主实例内部转发通道(internal/proxy-cmd)跳过外层房间门禁——班级实例自身已做同等级校验，
     // 否则 room '1' 当前班的锁定态会误拦其他班级页转发来的管理指令。
-    if (!opts.skipGate && cls && cls.pass && !session.unlocked[sid + ':' + cls.rid] && body.action !== 'unlockClass') {
+    if (!opts.skipGate && cls && hasPass(cls) && !session.unlocked[sid + ':' + cls.rid] && body.action !== 'unlockClass') {
       return json({ ok: false, msg: '需要班级密码' });
     }
     const find = (name) => cls && cls.students.find(x => x.name === name);
@@ -454,6 +515,7 @@ export class Room {
     switch (body.action) {
       case 'roll': {
         if (session.answering) { ok = false; msg = '答题进行中'; break; }
+        if (session.rolling) { ok = false; msg = '点名动画进行中，请稍候'; break; }   // P0-3 互斥
         const picked = this.pickStudents(roomId, body);
         if (picked.length === 0) {
           ok = false;
@@ -466,10 +528,14 @@ export class Room {
         const students = picked.map(x => ({ name: x.name, group: x.group || '' }));
         const pool = cls.students.map(x => x.name).filter(n => !this.absentNames(cls).includes(n));
         picked.forEach(x => { x.pickedCount = (x.pickedCount || 0) + 1; session.pickedThisRound.push(x.name); });
-        session.lessonLog.push({ names, display, at: now });
+        logPush(session.lessonLog, { names, display, at: now });
         this.broadcast(roomId, { event: 'rollStart', duration: session.animationMs, pool });
         const dur = Math.max(500, session.animationMs);
+        session.rolling = true;
+        const g = session.gen;   // 记录发起代次
         setTimeout(() => {
+          if (session.gen !== g) return;   // 期间 resetRound/切班/删班 → 弃用旧结果（P0-3）
+          session.rolling = false;
           session.lastPick = { names, display, at: Date.now() };
           session.answering = null;
           this.saveRoster(); this.pushState(roomId);
@@ -512,6 +578,7 @@ export class Room {
         break;
       }
       case 'skip': {
+        if (session.rolling) { ok = false; msg = '点名动画进行中，请稍候'; break; }   // P0-3
         if (!session.lastPick) { ok = false; msg = '请先点名'; break; }
         for (const n of session.lastPick.names) { const x = find(n); if (x) x.skipped = (x.skipped || 0) + 1; }
         tagLessonLog(session, session.lastPick.names, 'skip');   // 跳过也记入本节课记录
@@ -533,29 +600,37 @@ export class Room {
           const students = picked.map(x => ({ name: x.name, group: x.group || '' }));
           const pool2 = cls.students.map(x => x.name).filter(n => !this.absentNames(cls).includes(n));
           picked.forEach(x => { x.pickedCount = (x.pickedCount || 0) + 1; session.pickedThisRound.push(x.name); });
-          session.lessonLog.push({ names, display, at: Date.now() });
+          logPush(session.lessonLog, { names, display, at: Date.now() });
           this.broadcast(roomId, { event: 'rollStart', duration: session.animationMs, pool: pool2 });
+          session.rolling = true;
+          const g2 = session.gen;
           setTimeout(() => {
+            if (session.gen !== g2) return;   // 期间 resetRound/切班/删班 → 弃用旧结果（P0-3）
+            session.rolling = false;
             session.lastPick = { names, display, at: Date.now() };
             this.saveRoster(); this.pushState(roomId); this.broadcast(roomId, { event: 'rollResult', names, display, students });
           }, Math.max(500, session.animationMs));
         }
         break;
       }
-      case 'resetRound': session.pickedThisRound = []; session.lastPick = null; session.answering = null; break;
+      case 'resetRound': {
+        session.pickedThisRound = []; session.lastPick = null; session.answering = null;
+        bumpGen(session);   // P0-3：使在途点名动画回调失效
+        break;
+      }
       case 'page': {
         // 姓名+学号成对校验：学号用于区分同名，无学号的学生 sids 为空串（兼容旧控制端）
         const pairs = (body.names || []).map((n, i) => ({ n, s: (body.sids || [])[i] || '' })).filter(p => find(p.n));
         const names = pairs.map(p => p.n), sids = pairs.map(p => p.s);
         if (names.length === 0) { ok = false; msg = '学生不在名单内'; break; }
         session.page = {
-          names, sids, place: String(body.place || '办公室').slice(0, 20),
-          from: String(body.from || '').slice(0, 20),
-          note: String(body.note || '').slice(0, 30),
+          names, sids: sids.map(s => sanitize(s)), place: sanitize(String(body.place || '办公室')).slice(0, 20),
+          from: sanitize(String(body.from || '')).slice(0, 20),
+          note: sanitize(String(body.note || '')).slice(0, 30),
           // 展示时长已固定：大屏端居中弹窗统一展示 5 秒后自动收起（不再由控制端配置）
           sentAt: now, confirmed: false, retracted: false
         };
-        session.pageLog.push({ names, sids, place: session.page.place, from: session.page.from, sentAt: now, confirmed: false, retracted: false });
+        logPush(session.pageLog, { names, sids: session.page.sids, place: session.page.place, from: session.page.from, sentAt: now, confirmed: false, retracted: false }, 100);
         this.broadcast(roomId, { event: 'page', page: session.page });
         break;
       }
@@ -594,7 +669,7 @@ export class Room {
         const slotKey = String(body.slot);
         const isExtra = slotKey === 'pre' || slotKey === 'post';
         if (day < 1 || day > 5 || (!isExtra && (isNaN(+slotKey) || +slotKey < 0 || +slotKey >= (cls.tt.am + cls.tt.pm)))) { ok = false; msg = '无效位置'; break; }
-        const course = String(body.course || '').trim().slice(0, 12);
+        const course = sanitize(String(body.course || '')).slice(0, 12);
         if (course) cls.tt.cells[day + '_' + slotKey] = course; else delete cls.tt.cells[day + '_' + slotKey];
         this.saveRoster();
         break;
@@ -640,19 +715,23 @@ export class Room {
       }
       case 'setClassPass': {
       if (!cls) { ok = false; msg = '无班级'; break; }
+      const g1 = lockGuard(session); if (g1) { ok = false; msg = g1; break; }
       const old = String(body.old || '');
-      if (cls.pass && old !== cls.pass) { ok = false; msg = '原密码不正确'; break; }
-      const pass = String(body.pass || '').trim().slice(0, 20);
-      cls.pass = pass || '';
+      if (hasPass(cls) && !(await checkClassPass(cls, cls.rid, old))) { ok = false; msg = '原密码不正确'; markFail(session); break; }
+      const pass = sanitize(String(body.pass || '')).slice(0, 20);
+      if (pass) cls.passHash = await sha256hex(PASS_SALT + cls.rid + '::' + pass);   // 只存哈希（P1-7）
+      else delete cls.passHash;
+      delete cls.pass;   // 明文不再保留
       this.rooms.forEach(r => { r.unlocked = {}; });   // 改密后所有标签页的解锁全部失效
-      if (this.mode === 'class') { const d = (this.dir || []).find(x => x.rid === cls.rid); if (d) d.locked = !!cls.pass; }
+      if (this.mode === 'class') { const d = (this.dir || []).find(x => x.rid === cls.rid); if (d) d.locked = !!pass; }
       this.saveRoster();
+      markOk(session);
       msg = pass ? '班级密码已设置' : '班级密码已移除';
       break;
     }
-    case 'setNotice': {
+      case 'setNotice': {
         if (!cls) { ok = false; msg = '无班级'; break; }
-        const text = String(body.text || '').trim().slice(0, 120);
+        const text = sanitize(String(body.text || '')).slice(0, 120);
         cls.notice = { text, at: text ? Date.now() : 0 };
         this.saveRoster(); msg = text ? '公告已发布' : '公告已清除';
         break;
@@ -661,28 +740,32 @@ export class Room {
         const i = body.index | 0;
         if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
         const target = roster.classes[i];
-        if (target.pass && !session.unlocked[sid + ':' + target.rid] && String(body.pass || '') !== target.pass) {
-          ok = false; msg = '需要班级密码'; break;
+        if (hasPass(target) && !session.unlocked[sid + ':' + target.rid]) {
+          const g2 = lockGuard(session); if (g2) { ok = false; msg = g2; break; }
+          if (!(await checkClassPass(target, target.rid, body.pass))) { ok = false; msg = '需要班级密码'; markFail(session); break; }
+          markOk(session);
         }
         session.currentClass = i; roster.currentClass = i;
-        if (target.pass) session.unlocked[sid + ':' + target.rid] = true;
+        if (hasPass(target)) session.unlocked[sid + ':' + target.rid] = true;
         this.saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null;
+        bumpGen(session);   // P0-3：切班后旧班在途动画回调作废
         break;
       }
       case 'renameClass': {
         if (!cls) { ok = false; msg = '无班级'; break; }
-        const name = String(body.name || '').trim().slice(0, 20);
+        const name = sanitize(String(body.name || '')).slice(0, 20);
         if (!name) { ok = false; msg = '班级名称为空'; break; }
         cls.name = name; this.saveRoster(); msg = `班级已改名为「${name}」`;
         break;
       }
       case 'addClass': {
-        const name = String(body.name || '').trim().slice(0, 20) || `新班级${roster.classes.length + 1}`;
-        const pass = String(body.pass || '').trim().slice(0, 20);
-        roster.classes.push({ name, rid: this.genRid(name, roster.classes.length), groups: [], students: [], absent: { date: '', names: [] }, pass });
+        const name = sanitize(String(body.name || '')).slice(0, 20) || `新班级${roster.classes.length + 1}`;
+        const pass = sanitize(String(body.pass || '')).slice(0, 20);
+        roster.classes.push({ name, rid: this.genRid(name, roster.classes.length), groups: [], students: [], absent: { date: '', names: [] }, passHash: pass ? await sha256hex(PASS_SALT + this.genRid(name, roster.classes.length) + '::' + pass) : undefined });
         roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
         if (pass) session.unlocked[sid + ':' + roster.classes[roster.currentClass].rid] = true;
         session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
+        bumpGen(session);   // P0-3
         this.saveRoster();
         msg = pass ? `已创建班级「${name}」（已设置密码）` : `已创建班级「${name}」`;
         break;
@@ -692,8 +775,10 @@ export class Room {
         if (body.confirm !== true) { ok = false; msg = '未确认删除'; break; }
         const i = (body.index !== undefined) ? (body.index | 0) : roster.currentClass;
         if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
-        if (roster.classes[i].pass && String(body.pass || '') !== roster.classes[i].pass) {
-          ok = false; msg = '需要班级密码'; break;
+        if (hasPass(roster.classes[i])) {
+          const g3 = lockGuard(session); if (g3) { ok = false; msg = g3; break; }
+          if (!(await checkClassPass(roster.classes[i], roster.classes[i].rid, body.pass))) { ok = false; msg = '需要班级密码'; markFail(session); break; }
+          markOk(session);
         }
         const nm = roster.classes[i].name, delRid = roster.classes[i].rid;
         roster.classes.splice(i, 1);
@@ -703,7 +788,15 @@ export class Room {
           for (const k of Object.keys(r.unlocked)) if (k.endsWith(':' + delRid)) delete r.unlocked[k];
         });
         session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
+        bumpGen(session);   // P0-3
         this.saveRoster();
+        // P1-2：异步清空该班独立 DO 存储，杜绝「删除后 ≤20s 从残留 storage 复活」
+        if (this.mode === 'main' && /^c[0-9a-z]{4,8}$/.test(delRid)) {
+          try {
+            const stub = this.env.ROOM.get(this.env.ROOM.idFromName(delRid));
+            await stub.fetch('https://do/internal/purge', { method: 'POST' });
+          } catch (e) { /* purge 失败不影响主列表删除 */ }
+        }
         msg = `已删除班级「${nm}」`;
         break;
       }
@@ -721,10 +814,10 @@ export class Room {
           else if (p.length === 2) {
             if (/^\d+$/.test(p[1])) sid = p[1]; else group = p[1];
           }
-          return { name, sid: sid.slice(0, 20), group: group.slice(0, 12), weight, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 };
+          return { name: sanitize(name), sid: sanitize(sid).slice(0, 20), group: sanitize(group).slice(0, 12), weight, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 };
         }).filter(x => x.name);
         if (students.length === 0) { ok = false; msg = '没有解析到有效名单'; break; }
-        const name = String(body.className || '').trim() || `导入班${roster.classes.length + 1}`;
+        const name = sanitize(String(body.className || '')).slice(0, 20) || `导入班${roster.classes.length + 1}`;
         const groups = [...new Set(students.map(x => x.group).filter(Boolean))];
         roster.classes.push({ name, rid: this.genRid(name, roster.classes.length), groups, students });
         roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
@@ -747,7 +840,7 @@ export class Room {
           else if (p.length === 2) {
             if (/^\d+$/.test(p[1])) sid = p[1]; else group = p[1];
           }
-          return { name, sid: sid.slice(0, 20), group: group.slice(0, 12), weight, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 };
+          return { name: sanitize(name), sid: sanitize(sid).slice(0, 20), group: sanitize(group).slice(0, 12), weight, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 };
         }).filter(x => x.name);
         if (students.length === 0) { ok = false; msg = '没有解析到有效名单'; break; }
         const norm = s => String(s || '').replace(/[（）()]/g, '').trim();
@@ -765,17 +858,19 @@ export class Room {
       }
       case 'addStudent': {
         if (!cls) { ok = false; msg = '无班级'; break; }
-        const name = String(body.name || '').trim().slice(0, 20);
+        const name = sanitize(String(body.name || '')).slice(0, 20);
+        const sidv = sanitize(String(body.sid || '')).slice(0, 20);
+        const grpv = sanitize(String(body.group || '')).slice(0, 12);
         if (!name || find(name)) { ok = false; msg = '姓名为空或重复'; break; }
-        cls.students.push({ name, sid: String(body.sid || '').trim().slice(0, 20), group: String(body.group || '').trim(), weight: parseFloat(body.weight) || 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 });
-        if (body.group && !cls.groups.includes(body.group)) cls.groups.push(body.group);
+        cls.students.push({ name, sid: sidv, group: grpv, weight: parseFloat(body.weight) || 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 });
+        if (grpv && !cls.groups.includes(grpv)) cls.groups.push(grpv);
         this.saveRoster();
         break;
       }
       case 'setSid': {
         const x = find(String(body.name || ''));
         if (!x) { ok = false; msg = '学生不存在'; break; }
-        x.sid = String(body.sid || '').trim().slice(0, 20);
+        x.sid = sanitize(String(body.sid || '')).slice(0, 20);
         this.saveRoster();
         break;
       }
@@ -812,7 +907,7 @@ export class Room {
       }
       case 'addGroup': {
         if (!cls) { ok = false; msg = '无班级'; break; }
-        const g = String(body.name || '').trim().slice(0, 12);
+        const g = sanitize(String(body.name || '')).slice(0, 12);
         if (!g) { ok = false; msg = '组名为空'; break; }
         if (!cls.groups.includes(g)) { cls.groups.push(g); this.saveRoster(); msg = `已添加组「${g}」`; }
         break;
@@ -827,7 +922,7 @@ export class Room {
         break;
       }
       case 'addPlace': {
-        const p = String(body.name || '').trim().slice(0, 20);
+        const p = sanitize(String(body.name || '')).slice(0, 20);
         if (p && !roster.places.includes(p)) { roster.places.push(p); this.saveRoster(); }
         break;
       }
@@ -841,15 +936,19 @@ export class Room {
       }
       case 'unlockClass': {
         if (!cls) { ok = false; msg = '无班级'; break; }
-        if (!cls.pass) break;   // 未加密班级无需解锁
-        if (String(body.pass || '') === cls.pass) { session.unlocked[sid + ':' + cls.rid] = true; msg = '已解锁'; }
-        else { ok = false; msg = '密码不正确'; }
+        if (!hasPass(cls)) break;   // 未加密班级无需解锁
+        // 暴破限速（P1-7）：正确密码随时可解锁并清计数；错误尝试在锁定窗口内被拦截
+        if (await checkClassPass(cls, cls.rid, body.pass)) { session.unlocked[sid + ':' + cls.rid] = true; markOk(session); msg = '已解锁'; }
+        else {
+          const g4 = lockGuard(session);
+          if (g4) { ok = false; msg = g4; } else { ok = false; msg = '密码不正确'; markFail(session); }
+        }
         break;
       }
       // 备忘录（按班级保存）：添加 / 勾选完成 / 删除 / 清除已完成
       case 'memoAdd': {
         if (!cls) { ok = false; msg = '无班级'; break; }
-        const text = String(body.text || '').trim().slice(0, 200);
+        const text = sanitize(String(body.text || '')).slice(0, 200);
         if (!text) { ok = false; msg = '内容为空'; break; }
         cls.memos = cls.memos || [];
         cls.memos.push({ id: now.toString(36) + Math.random().toString(36).slice(2, 6), text, at: now, done: false });
@@ -886,14 +985,23 @@ export class Room {
     await this.ready;
     const url = new URL(req.url);
     this.origin = url.origin;
+    // P2-4：任意请求入口即检查一次自动考试模式（不依赖心跳里的 SSE 空转）
+    try { this.autoExamTickAll(); } catch (e) {}
     const roomId = url.searchParams.get('room') || '1';
     const sid = String(url.searchParams.get('sid') || '');   // 浏览器标签页会话 id：解锁态按标签页隔离，新开页面必重新输密码
+    // 主实例删班后调用本端点清空该班独立 DO 存储（P1-2：删除后不再从残留 storage 复活）
+    // 必须放在 invalid 早退之前：被删班级的 DO 此刻 storage 里还有 cls，需要能执行到删除
+    if (this.mode === 'class' && url.pathname === '/internal/purge' && req.method === 'POST') {
+      try { await this.state.storage.deleteAll(); } catch (e) {}
+      this.invalid = true;
+      return json({ ok: true });
+    }
     // 失效班级实例（rid 在主实例中不存在）：返回 404，前端自动回退首页
     if (this.invalid) return json({ ok: false, msg: '房间不存在或已失效' }, 404);
     // 主实例内部端点（仅 DO 间通过 service binding 调用；Worker 入口不转发 /internal/*，公网不可达）
     if (this.mode === 'main' && url.pathname === '/internal/dir') {
       return json({
-        classes: this.roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: !!c.pass })),
+        classes: this.roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: hasPass(c) })),
         places: this.roster.places
       });
     }
@@ -957,8 +1065,13 @@ export default {
       }
       const roomId = url.searchParams.get('room') || '1';
       let name = 'main';
-      if (roomId !== '1' && /^c[0-9a-z]{4,8}$/.test(roomId) && await isClassRid(env, roomId)) name = roomId;
-      return env.ROOM.get(env.ROOM.idFromName(name)).fetch(req);
+      let fwdReq = req;
+      if (roomId !== '1') {
+        const ridLike = /^c[0-9a-z]{4,8}$/.test(roomId);
+        if (ridLike && await isClassRid(env, roomId)) name = roomId;
+        else { const u = new URL(req.url); u.searchParams.set('room', '1'); fwdReq = new Request(u, req); }   // P1-1：非班级房间一律归一到 '1'，防 rooms Map 无限膨胀
+      }
+      return env.ROOM.get(env.ROOM.idFromName(name)).fetch(fwdReq);
     }
     return await serveAssetWithCharset(req, env);
   }
