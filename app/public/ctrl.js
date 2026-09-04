@@ -507,3 +507,49 @@ $('pickModalTimerChips').addEventListener('click', e => {
   closePickModal();
 });
 $('pickModalSkipBtn').onclick = () => { cmd({ action: 'skip' }); closePickModal(); };
+
+/* ---------- 本机桌面版 · 开机自启动（Electron 专属；浏览器访问自动降级为提示） ---------- */
+(function initAutoLaunch() {
+  const isDesktop = !!(window.djt && window.djt.isDesktop);
+  $('alEnvBadge').style.display = isDesktop ? '' : 'none';
+  $('alDesktop').style.display = isDesktop ? '' : 'none';
+  $('alBrowser').style.display = isDesktop ? 'none' : '';
+  if (!isDesktop) return;   // 浏览器打开：仅展示「下载桌面版」提示
+
+  let cur = { enabled: false, mode: 'ctrl' };
+
+  // 开关状态 → 模式 chips 置灰/可点
+  function refreshUI() {
+    const on = $('autoLaunchChk').checked;
+    const chips = $('autoLaunchModeChips');
+    chips.style.opacity = on ? '' : '.45';
+    chips.style.pointerEvents = on ? '' : 'none';
+    chips.style.userSelect = on ? '' : 'none';
+  }
+  function syncUI(s) {
+    if (s) cur = s;
+    $('autoLaunchChk').checked = !!cur.enabled;
+    syncChips('autoLaunchModeChips', 'm', cur.mode || 'ctrl');
+    refreshUI();
+  }
+
+  // 页面加载：读取本机真实状态（与托盘菜单同步）
+  window.djt.getAutoLaunch().then(syncUI).catch(() => {});
+
+  $('autoLaunchChk').addEventListener('change', function () {
+    const on = this.checked;
+    window.djt.setAutoLaunch({ enabled: on, mode: cur.mode })
+      .then(syncUI)
+      .catch(() => { toast('设置失败'); syncUI(); });
+    toast(on ? '✅ 已开启开机自启动' : '已关闭开机自启动');
+  });
+  $('autoLaunchModeChips').addEventListener('click', e => {
+    if (!e.target.dataset.m || !$('autoLaunchChk').checked) return;
+    window.djt.setAutoLaunch({ enabled: true, mode: e.target.dataset.m })
+      .then(syncUI)
+      .catch(() => { toast('设置失败'); syncUI(); });
+    toast(e.target.dataset.m === 'screen'
+      ? '🖥 开机后将直接进入大屏端（控制端在托盘待命）'
+      : '📱 开机后将打开控制端');
+  });
+})();
