@@ -40,21 +40,33 @@
  * ============================================================ */
 var DL = [
   {
-    id: 'exe', icon: '🖥️', name: '桌面版 · 单文件版', badge: '推荐',
-    os: 'Windows 10/11 · 64 位', size: '约 75 MB', ver: 'v1.1.2',
-    desc: '绿色单文件，拷 U 盘即用。v1.1.2 起程序声明「需要管理员权限」：双击弹一次 UAC，点【是】即开，从根上解决此前普通双击无反应的静默拦截。v1.1 新增开机自启动（控制端/大屏端可选）。',
-    url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Desktop.exe'
+    id: 'ctrl-exe', icon: '🎛️', name: '点将台-控制端（单文件版）', badge: '教师端',
+    os: 'Windows 10/11 · 64 位', size: '约 71 MB', ver: 'v2.0.0',
+    desc: '教师控制窗口：班级管理/点名/传呼/设置/开机自启。v2.0.0 拆分为独立 App；启动需管理员权限，双击弹 UAC 提权。',
+    url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Ctrl.exe'
   },
   {
-    id: 'zip', icon: '📦', name: '桌面版 · 便携版',
-    os: 'Windows 10/11 · 64 位', size: '约 103 MB', ver: 'v1.1.2',
-    desc: 'Zip 压缩包，解压后双击 exe 即用。v1.1.2 起双击弹一次 UAC，点【是】即开（管理员权限版）；v1.1 新增开机自启动（控制端/大屏端可选）。文件图标与运行时图标均为「点」图标。',
-    url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Portable.zip'
+    id: 'ctrl-zip', icon: '📦', name: '点将台-控制端（便携版）',
+    os: 'Windows 10/11 · 64 位', size: '约 103 MB', ver: 'v2.0.0',
+    desc: '控制端 zip 压缩包：解压后双击「点将台-控制端.exe」即用。教师控制窗口（班级/点名/传呼/设置/开机自启）。',
+    url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Ctrl.zip'
+  },
+  {
+    id: 'screen-exe', icon: '📺', name: '点将台-大屏端（单文件版）', badge: '教室大屏',
+    os: 'Windows 10/11 · 64 位', size: '约 71 MB', ver: 'v2.0.0',
+    desc: '教室大屏展示窗口：接收控制端传呼/系统通知+任务栏闪/AI 播报。v2.0.0 拆分为独立 App；关闭按钮 = 退到托盘保 SSE 连接。',
+    url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Screen.exe'
+  },
+  {
+    id: 'screen-zip', icon: '📦', name: '点将台-大屏端（便携版）',
+    os: 'Windows 10/11 · 64 位', size: '约 103 MB', ver: 'v2.0.0',
+    desc: '大屏端 zip 压缩包：解压后双击「点将台-大屏端.exe」即用。教室大屏展示（接收传呼/退托盘保 SSE）。',
+    url: 'https://github.com/qitian2011/dianjiangtai/releases/latest/download/DianJiangTai-Screen.zip'
   },
   {
     id: 'doc', icon: '📄', name: '使用说明', badge: '必备',
     os: '通用', size: '约 4 KB',
-    desc: '安装、功能一览、常见问题（未签名提示 / 通知设置 / 大屏全屏退出 / 运行不了排查）。',
+    desc: '安装、功能一览、常见问题（未签名提示 / 通知设置 / 大屏全屏退出 / UAC 提权 / 控制端+大屏端联动）。',
     url: '使用说明.txt'
   }
 ];
