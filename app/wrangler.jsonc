@@ -9,7 +9,9 @@
   // 自定义域名：如需自动绑定，请给 API Token 加「Zone: Workers Routes: Edit」权限后取消下面注释再 deploy
   // 手动方式（推荐，无需改 Token）：Cloudflare 后台 → Workers 和 Pages → dianjiangtai → 设置 → 域和路由 → 添加自定义域 qitian.dpdns.org
   // "routes": [{ "pattern": "qitian.dpdns.org", "custom_domain": true }],
-  // 访问密码：留空 "" = 不启用（任何设备打开都不弹密码）。
-  // 注意：无密码时名单对学生可见、知道网址的人都能操作；如想重新启用，填个数字再 deploy 即可
-  "vars": { "PIN": "" }
+  // 访问密码（安全修复 2026-09-04）：非空时 /events 与 /api/* 需带 pin 参数或 x-pin 请求头才放行。
+  // 前端首次访问会弹一次输入框，之后 localStorage 记忆免重复输入。
+  // ⚠️ 默认值 246810：如需更换，改这里后重新 `wrangler deploy` 即生效（改动只影响之后的新请求）。
+  // 班级名单含学生真实姓名/学号，公网必须设 PIN，请勿置空！
+  "vars": { "PIN": "246810" }
 }

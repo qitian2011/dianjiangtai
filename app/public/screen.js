@@ -4,6 +4,8 @@ let rollTimer = null;
 let soundCtx = null;
 let volume = 0.3;
 const $ = id => document.getElementById(id);
+// HTML 全量转义（P0-2 XSS 修复）：& < > " ' 五项全转，可同时用于文本节点与双引号属性
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
 
 /* ---------- 声音 ---------- */
 function ensureAudio() {
@@ -187,7 +189,7 @@ function toggleClassPicker(show) {
   if (show && S) {
     $('classList').innerHTML = (S.allClasses || []).map(c => {
       const cur = c.rid === ROOM;   // 当前班级 = URL 里的班级rid
-      return `<button class="cc-item${cur ? ' cur' : ''}" data-i="${c.i}">${c.locked ? '🔒 ' : ''}${c.name}${cur ? '（当前）' : ''}</button>`;
+      return `<button class="cc-item${cur ? ' cur' : ''}" data-i="${c.i}">${c.locked ? '🔒 ' : ''}${esc(c.name)}${cur ? '（当前）' : ''}</button>`;
     }).join('');
   }
 }
@@ -266,18 +268,18 @@ function renderTtTable() {
   if (now) {
     const st = statsMap[now.key];
     const course = (tt.cells || {})[today + '_' + now.key];
-    html += `<div class="now-bar"><span class="nb-ico">📖</span>现在是：<b>${now.label}${course ? ' · ' + course : ''}</b>${now.time ? `<span class="nb-time">${now.time}</span>` : ''}${st ? `<span class="nb-stats">答出 <b>${st.answered}</b> · 未答出 <b>${st.missed}</b></span>` : ''}</div>`;
+    html += `<div class="now-bar"><span class="nb-ico">📖</span>现在是：<b>${esc(now.label)}${course ? ' · ' + esc(course) : ''}</b>${now.time ? `<span class="nb-time">${esc(now.time)}</span>` : ''}${st ? `<span class="nb-stats">答出 <b>${st.answered}</b> · 未答出 <b>${st.missed}</b></span>` : ''}</div>`;
   }
   html += '<table class="screen-tt"><tr><th class="stt-slot"></th>' + days.map((d, i) => `<th class="${today === i + 1 ? 'today' : ''}">${d}</th>`).join('') + '</tr>';
   for (const sl of slots) {
     const isNow = !!(now && now.key === sl.key);
     const t = (tt.times || {})[sl.key];
-    const timeHtml = (t && (t.s || t.e)) ? `<span class="stt-time">${t.s || ''}${t.s && t.e ? '—' : ''}${t.e || ''}</span>` : '';
+    const timeHtml = (t && (t.s || t.e)) ? `<span class="stt-time">${esc(t.s || '')}${t.s && t.e ? '—' : ''}${esc(t.e || '')}</span>` : '';
     const nowTag = isNow ? '<span class="stt-now-tag">当前</span>' : '';
-    html += `<tr class="${sl.extra ? 'stt-extra-row' : ''}${isNow ? ' now' : ''}"><td class="stt-slot${sl.extra ? ' stt-extra-slot' : ''}">${nowTag}${sl.label}${timeHtml}</td>`;
+    html += `<tr class="${sl.extra ? 'stt-extra-row' : ''}${isNow ? ' now' : ''}"><td class="stt-slot${sl.extra ? ' stt-extra-slot' : ''}">${nowTag}${esc(sl.label)}${timeHtml}</td>`;
     for (let d = 1; d <= 5; d++) {
       const course = (tt.cells || {})[d + '_' + sl.key];
-      html += `<td class="${today === d ? 'today' : ''}">${course ? course : '<span class="stt-empty">—</span>'}</td>`;
+      html += `<td class="${today === d ? 'today' : ''}">${course ? esc(course) : '<span class="stt-empty">—</span>'}</td>`;
     }
     html += '</tr>';
   }
@@ -361,8 +363,15 @@ function showPage(page) {
   $('pPlace').textContent = `请到「${page.place}」` + (page.from ? ` 找 ${page.from}` : '');
   $('pNote').textContent = page.note || '';
   $('pFrom').textContent = '请看到通知后及时前往';
-  // 考试模式只显示角落条，不弹卡不发声
-  if (S && S.examMode) { clearTimeout(pageOverlayT); pageOverlayShownAt = 0; $('pageOverlay').style.display = 'none'; return; }
+  // 考试模式只显示角落条，不弹卡不发声；同时把该传呼标记为“已处理”，
+  // 退出考试模式后不会补弹大窗/补响铃/补桌面通知（P1-5）
+  if (S && S.examMode) {
+    clearTimeout(pageOverlayT); pageOverlayT = null;
+    pageOverlayShownAt = page.sentAt;
+    lastPageSoundAt = page.sentAt;
+    $('pageOverlay').style.display = 'none';
+    return;
+  }
   const isNewPage = page.sentAt !== pageOverlayShownAt;
   if (isNewPage) {
     pageOverlayShownAt = page.sentAt;
@@ -428,7 +437,7 @@ function render() {
   if (pend.length) {
     stackEl.innerHTML = pend.slice().reverse().map(p => {
       const t = new Date(p.sentAt), ts = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
-      return `<div class="ps-item">👤 <b>${p.names.join('、')}</b> → ${p.place}${p.from ? ' · 找' + p.from : ''}<span class="ps-time">${ts}</span></div>`;
+      return `<div class="ps-item">👤 <b>${esc(p.names.join('、'))}</b> → ${esc(p.place)}${p.from ? ' · 找' + esc(p.from) : ''}<span class="ps-time">${ts}</span></div>`;
     }).join('');
     stackEl.style.display = '';
   } else { stackEl.style.display = 'none'; stackEl.innerHTML = ''; }
@@ -436,13 +445,17 @@ function render() {
   const d = new Date();
   $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   // 二维码（缩小放右下角，扫第一个候选地址进控制端，自动带房间参数）
+  // P2-8：仅当目标 URL 变化时才重建 SVG，避免高频 state 下反复清空/重插造成抖动
   if (typeof qrcode === 'function') {
     const urls = (S.ctrlUrls && S.ctrlUrls.length ? S.ctrlUrls : [location.origin + '/ctrl.html' + (location.search || '')]);
-    try {
-      const qr = qrcode(0, 'M');
-      qr.addData(urls[0]); qr.make();
-      $('qrCorner').innerHTML = qr.createSvgTag({ cellSize: 2, margin: 1, scalable: true }) + '<div class="qr-corner-label">📱 扫码控制</div>';
-    } catch (e) {}
+    if (!render._qrUrl || render._qrUrl !== urls[0]) {
+      render._qrUrl = urls[0];
+      try {
+        const qr = qrcode(0, 'M');
+        qr.addData(urls[0]); qr.make();
+        $('qrCorner').innerHTML = qr.createSvgTag({ cellSize: 2, margin: 1, scalable: true }) + '<div class="qr-corner-label">📱 扫码控制</div>';
+      } catch (e) {}
+    }
   }
   // 主视图：滚动动画进行中绝不切走（否则 skip 连抽等中间状态会把动画打回待机）
   if ($('rolling').style.display !== 'none') {
@@ -493,7 +506,7 @@ function render() {
   // 本节课点名录（判定结果：✓答对 ✗答错 — 未答 ⏭跳过，随行小标）
   const RES = { right: ['✓', '#7bd88f'], wrong: ['✗', '#ff8080'], none: ['—', '#9a9a9a'], skip: ['⏭', '#9a9a9a'] };
   $('lessonLog').innerHTML = (S.lessonLog || []).map(l =>
-    `<div>${(l.display || l.names).join('、')}${l.result && RES[l.result] ? ` <b style="color:${RES[l.result][1]}">${RES[l.result][0]}</b>` : ''}</div>`
+    `<div>${esc((l.display || l.names).join('、'))}${l.result && RES[l.result] ? ` <b style="color:${RES[l.result][1]}">${RES[l.result][0]}</b>` : ''}</div>`
   ).join('');
 }
 setInterval(() => { const d = new Date(); $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }, 10000);
