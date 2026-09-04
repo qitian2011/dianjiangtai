@@ -1057,11 +1057,14 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === '/') return Response.redirect(url.origin + '/screen.html', 302);
     if (url.pathname === '/events' || url.pathname.startsWith('/api/')) {
-      if (env.PIN) {
-        const pin = url.searchParams.get('pin') || req.headers.get('x-pin') || '';
-        if (pin !== env.PIN) {
-          return json({ ok: false, msg: '需要访问密码' }, 401);
-        }
+      if (!env.PIN) {
+        // fail-closed（去明文化 2026-09-04）：PIN 走 `wrangler secret put PIN` / `--var PIN:xxx` 注入，
+        // 未配置一律 503，杜绝忘配导致公网名单/操作裸奔
+        return json({ ok: false, msg: '服务端未配置访问密码（PIN），请联系管理员设置' }, 503);
+      }
+      const pin = url.searchParams.get('pin') || req.headers.get('x-pin') || '';
+      if (pin !== env.PIN) {
+        return json({ ok: false, msg: '需要访问密码' }, 401);
       }
       const roomId = url.searchParams.get('room') || '1';
       let name = 'main';
