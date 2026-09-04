@@ -117,6 +117,29 @@ function tagLessonLog(session, names, result) {
 function json(obj, status = 200) {
   return new Response(JSON.stringify(obj), { status, headers: { 'Content-Type': 'application/json; charset=utf-8' } });
 }
+// 静态资源带 charset 处理：CF assets 默认对 .txt 给 text/plain 无 charset，
+// 这里强制给文本资源 UTF-8 + Content-Disposition 内联展示（保中文件名），避免中文乱码与浏览器当下载
+// 注意：必须完全不复制原 headers，否则 CF 边缘节点会用原 Content-Type 覆盖
+async function serveAssetWithCharset(req, env) {
+  const url = new URL(req.url);
+  const m = (url.pathname.match(/\.([a-z0-9]+)$/i) || [, '']);
+  const ext = m[1].toLowerCase();
+  const TEXT_EXT = { txt: 'text/plain; charset=utf-8', md: 'text/markdown; charset=utf-8', json: 'application/json; charset=utf-8', js: 'text/javascript; charset=utf-8', css: 'text/css; charset=utf-8', html: 'text/html; charset=utf-8' };
+  const r = await env.ASSETS.fetch(req);
+  if (!r.ok) return r;
+  if (!TEXT_EXT[ext]) return r;   // 非文本类型直接返回原响应（保留 CF 默认 Content-Type）
+  const baseName = url.pathname.split('/').pop() || 'file';
+  const enc = encodeURIComponent(baseName).replace(/['()]/g, escape).replace(/\*/g, '%2A');
+  // 完全重写 headers（不复制 r.headers，避免 CF 边缘节点覆盖）
+  return new Response(r.body, {
+    status: r.status,
+    headers: {
+      'Content-Type': TEXT_EXT[ext],
+      'Content-Disposition': `inline; filename="${baseName.replace(/[\r\n"]/g, '_')}"; filename*=UTF-8''${enc}`,
+      'Cache-Control': 'no-cache'
+    }
+  });
+}
 
 /* ---------------- Durable Object：主实例（管理中枢/全量镜像） 或 一间教室（每班独立） ---------------- */
 export class Room {
@@ -937,6 +960,6 @@ export default {
       if (roomId !== '1' && /^c[0-9a-z]{4,8}$/.test(roomId) && await isClassRid(env, roomId)) name = roomId;
       return env.ROOM.get(env.ROOM.idFromName(name)).fetch(req);
     }
-    return env.ASSETS.fetch(req);
+    return await serveAssetWithCharset(req, env);
   }
 };
