@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=34">
+<link rel="stylesheet" href="style.css?v=35">
 <script src="theme.js?v=34"></script>
 </head>
 <body>
@@ -12,6 +12,7 @@
   <div class="ctrl-header">
     <select id="classSel" class="class-sel"></select>
     <div class="class-actions">
+      <a class="btn small" href="download.html" title="下载桌面版客户端与资料">⬇ 下载</a>
       <button class="btn small" id="addClassBtn" title="新建班级">➕ 新建</button>
       <button class="btn small" id="delClassBtn" title="删除当前班级" style="color:#ff5d5d">🗑 删除</button>
       <button class="btn small" id="renameClassBtn" title="修改当前班级名称">✏️ 改名</button>
@@ -218,6 +219,25 @@
 
   <!-- ============ 设置 ============ -->
   <div id="tab-set" style="display:none">
+    <div class="card" id="autoLaunchCard">
+      <h3>💻 本机桌面版 · 开机自启动 <span class="badge" id="alEnvBadge" style="background:rgba(10,132,255,.18);color:var(--accent);display:none">桌面版</span></h3>
+      <div id="alDesktop">
+        <label class="switch"><input type="checkbox" id="autoLaunchChk"> 开机时自动运行点将台</label>
+        <div style="font-size:13px; color:var(--dim); margin-top:10px; margin-bottom:6px">自启动后打开哪个界面：</div>
+        <div class="count-select" id="autoLaunchModeChips">
+          <span class="chip sel" data-m="ctrl">📱 控制端（教师页）</span>
+          <span class="chip" data-m="screen">🖥 大屏端（展示页）</span>
+        </div>
+        <div style="font-size:12.5px; color:var(--dim); margin-top:10px; line-height:1.7">
+          开启后 Windows 登录即自动运行，无需手动双击。<b>大屏端模式</b>适合教室一体机：开机直接进大屏待机/课表展示，控制端收进系统托盘待命（点托盘图标可唤起）。<br>
+          此设置保存在本机，换电脑需重新勾选；也可在系统托盘菜单「开机自动启动」处快速开关。
+        </div>
+      </div>
+      <div id="alBrowser" style="display:none; font-size:13px; color:var(--dim); line-height:1.8">
+        开机自启动是 <b>Windows 桌面版</b>功能。当前是在浏览器里打开的，请在电脑上安装桌面版后使用 →
+        <a href="download.html" style="color:var(--accent); text-decoration:none; font-weight:700">⬇ 下载桌面版</a>
+      </div>
+    </div>
     <div class="card">
       <h3>班级密码（设置后：切换班级 / 删除该班 都需要密码）</h3>
       <div style="font-size:13px; color:var(--dim); margin-bottom:8px" id="classPassStatus">当前：未加密</div>
@@ -298,6 +318,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=34"></script>
+<script src="ctrl.js?v=35"></script>
 </body>
 </html>
