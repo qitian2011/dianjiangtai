@@ -1,0 +1,956 @@
+/**
+ * 课堂互动大屏服务 · 零依赖版（Node 18+，无需 npm install）
+ * 架构：HTTP 静态服务 + SSE(Server-Sent Events) 实时下行 + POST 指令上行
+ * 取代文档中的 Socket.IO：功能等价，且完全离线、U盘拷贝即用
+ */
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
+
+const PORT = process.env.PORT || 8080;
+// 访问密码（P1-4 + 发布包去明文化 2026-09-04）：/events 与 /api/* 需带 pin 参数或 x-pin 请求头。
+// 密码来源（源码/发布包不含任何明文密码）：① 环境变量 DJT_PIN；② 同目录 .djt_pin 文件（双击 启动.bat 引导创建，不入包）。
+// 未配置 = 服务端未设密码：/api 与 /events 一律 503 拒绝（fail-closed，防局域网名单裸奔）；显式 DJT_PIN= 空串 = 关闭鉴权（仅本机调试）。
+const ROOT = __dirname;
+function loadPin() {
+  if (process.env.DJT_PIN !== undefined) return process.env.DJT_PIN;
+  try { const v = fs.readFileSync(path.join(ROOT, '.djt_pin'), 'utf8').trim(); return v || undefined; } catch (e) { return undefined; }
+}
+const PIN = loadPin();
+const PUBLIC = path.join(ROOT, 'public');
+const ROSTER_FILE = path.join(ROOT, 'roster.json');
+
+/* ============================================================
+ * 安全与健壮性工具（v2.0.2 安全加固 2026-09-04）
+ * ⚠️ 本文件与 worker.js 是双份业务实现：改这里必须同步改 worker.js！
+ * ============================================================ */
+// 存储层清洗：剔除 HTML 特殊字符与控制字符（源头防 XSS，P0-2）
+function sanitize(s) {
+  return String(s == null ? '' : s)
+    .replace(/[<>"'&`]/g, '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim();
+}
+// 班级密码哈希（SHA-256，盐=固定前缀+班级rid）：不再明文存储/比对（P1-7）
+const PASS_SALT = 'djt::v2::';
+function sha256hex(s) { return crypto.createHash('sha256').update(String(s)).digest('hex'); }
+function hasPass(cls) {
+  if (!cls) return false;
+  return !!(cls.passHash || cls.pass);   // 兼容旧明文数据
+}
+function checkClassPass(cls, rid, input) {
+  if (!cls || !hasPass(cls)) return true;
+  if (cls.passHash) return sha256hex(PASS_SALT + rid + '::' + String(input || '')) === cls.passHash;
+  return String(input || '') === String(cls.pass);   // 旧明文数据兼容路径
+}
+// 密码尝试限速（防在线暴破）：失败 5 次锁 30 秒
+function lockGuard(session) {
+  const f = session.unlockFail || (session.unlockFail = { n: 0, until: 0 });
+  return Date.now() < f.until ? '尝试次数过多，请 30 秒后再试' : null;
+}
+function markFail(session) {
+  const f = session.unlockFail || (session.unlockFail = { n: 0, until: 0 });
+  f.n++;
+  if (f.n >= 5) { f.n = 0; f.until = Date.now() + 30000; }
+}
+function markOk(session) { const f = session.unlockFail; if (f) f.n = 0; }
+// 日志硬上限（P1-1）
+function logPush(arr, entry, cap = 200) {
+  arr.push(entry);
+  if (arr.length > cap) arr.splice(0, arr.length - cap);
+}
+// 点名动画互斥（P0-3）
+function bumpGen(session) { session.gen = (session.gen || 0) + 1; session.rolling = false; }
+
+/* ---------------- 名单与持久化 ---------------- */
+function defaultRoster() {
+  return {
+    classes: [{
+      name: '示例班',
+      groups: ['A组', 'B组'],
+      students: [
+        { name: '张三', sid: '2024001', group: 'A组', weight: 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 },
+        { name: '李四', sid: '2024002', group: 'B组', weight: 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 },
+        { name: '王五', sid: '2024003', group: 'A组', weight: 2, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 },
+        { name: '赵六', sid: '2024004', group: 'B组', weight: 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 }
+      ],
+      absent: { date: '', names: [] }   // 当日请假名单（跨天自动失效）
+    }],
+    places: ['办公室', '教务处', '医务室', '自习室'],
+    currentClass: 0
+  };
+}
+function loadJSON(f) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (e) { return null; } }
+let roster = loadJSON(ROSTER_FILE) || defaultRoster();
+roster.classes.forEach(c => { if (!c.absent || typeof c.absent !== 'object') c.absent = { date: '', names: [] }; });
+// 老名单迁移：补学号字段 + 补班级房间ID(rid) + 补班级设置(prefs)
+let hadPassMigration = false;
+roster.classes.forEach(c => (c.students || []).forEach(s => { if (s.sid === undefined) s.sid = ''; }));
+roster.classes.forEach((c, i) => {
+  if (!c.rid) c.rid = genRid(c.name || '', i);
+  if (!c.prefs) c.prefs = {};
+  if (c.prefs.volume === undefined) c.prefs.volume = 0.3;
+  if (c.prefs.animationMs === undefined) c.prefs.animationMs = 3000;
+  if (c.prefs.voiceMode === undefined) c.prefs.voiceMode = 'sound';
+  if (c.prefs.showTt === undefined) c.prefs.showTt = true;
+  if (c.prefs.showMemos === undefined) c.prefs.showMemos = false;   // 大屏作业栏开关（默认关）
+  if (c.prefs.autoExam === undefined) c.prefs.autoExam = true;   // 按课表：上课时间自动进考试模式（默认开，未配节次时间的班不受影响）
+  if (!c.tt || typeof c.tt !== 'object') c.tt = { am: 4, pm: 3, cells: {} };   // 班级课表
+  if (!c.tt.cells) c.tt.cells = {};
+  if (!c.tt.times) c.tt.times = {};
+  if (!c.tt.am) c.tt.am = 4;
+  if (!c.tt.pm) c.tt.pm = 3;
+  if (c.tt.pre === undefined) c.tt.pre = 0;    // 早读课开关
+  if (c.tt.post === undefined) c.tt.post = 0;  // 晚托课开关
+  if (!c.notice || typeof c.notice !== 'object') c.notice = { text: '', at: 0 };   // 班级公告
+  if (!Array.isArray(c.memos)) c.memos = [];   // 备忘录（按班级保存）
+  if (c.pass && !c.passHash) { c.passHash = sha256hex(PASS_SALT + c.rid + '::' + c.pass); delete c.pass; hadPassMigration = true; }   // 旧明文密码迁移为哈希（P1-7）
+});
+function saveRoster() { fs.writeFileSync(ROSTER_FILE, JSON.stringify(roster, null, 2), 'utf8'); }
+if (hadPassMigration) saveRoster();
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+// 根据课表时间判断当前属于哪一节（返回 slotKey 如 'pre'/'0'/1...，无课/未配时间返回 null）
+function currentSlotKey(tt) {
+  if (!tt || !tt.times) return null;
+  const now = new Date();
+  const dow = now.getDay();           // 1-5 周一~周五
+  if (dow < 1 || dow > 5) return null;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const slots = [];
+  if (tt.pre) slots.push({ key: 'pre' });
+  for (let s = 0; s < (tt.am || 0); s++) slots.push({ key: String(s) });
+  for (let s = 0; s < (tt.pm || 0); s++) slots.push({ key: String((tt.am || 0) + s) });
+  if (tt.post) slots.push({ key: 'post' });
+  for (const sl of slots) {
+    const t = tt.times[sl.key];
+    if (!t || !t.s) continue;
+    const sp = String(t.s).split(':');
+    const sh = parseInt(sp[0], 10), sm = parseInt(sp[1], 10);
+    if (isNaN(sh)) continue;
+    const sMin = sh * 60 + (isNaN(sm) ? 0 : sm);
+    let eMin = Infinity;
+    if (t.e) {
+      const ep = String(t.e).split(':');
+      const eh = parseInt(ep[0], 10), em = parseInt(ep[1], 10);
+      if (!isNaN(eh)) eMin = eh * 60 + (isNaN(em) ? 0 : em);
+    }
+    if (nowMin >= sMin && nowMin < eMin) return sl.key;
+  }
+  return null;
+}
+// 按课表判断当前是否在上课时间内（自动考试模式用）。与 currentSlotKey 不同：要求节次起止时间都配全
+// ——只有完整起止时间的节次才参与自动切换，避免"只填开始时间"的节次让考试模式迟迟不退出
+function autoInClass(tt) {
+  if (!tt || !tt.times) return false;
+  const d = new Date();
+  const dow = d.getDay();           // 1-5 周一~周五
+  if (dow < 1 || dow > 5) return false;
+  const nowMin = d.getHours() * 60 + d.getMinutes();
+  const slots = [];
+  if (tt.pre) slots.push('pre');
+  for (let s = 0; s < (tt.am || 0); s++) slots.push(String(s));
+  for (let s = 0; s < (tt.pm || 0); s++) slots.push(String((tt.am || 0) + s));
+  if (tt.post) slots.push('post');
+  for (const key of slots) {
+    const t = tt.times[key];
+    if (!t || !t.s || !t.e) continue;   // 起止必须完整
+    const sp = String(t.s).split(':'), ep = String(t.e).split(':');
+    const sh = parseInt(sp[0], 10), sm = parseInt(sp[1], 10), eh = parseInt(ep[0], 10), em = parseInt(ep[1], 10);
+    if (isNaN(sh) || isNaN(eh)) continue;
+    const sMin = sh * 60 + (isNaN(sm) ? 0 : sm), eMin = eh * 60 + (isNaN(em) ? 0 : em);
+    if (nowMin >= sMin && nowMin < eMin) return true;
+  }
+  return false;
+}
+// 把点名判定结果写回「本节课记录」中对应轮次（尾向找第一条未标记且包含这些名字的记录，兼容多轮同名）
+function tagLessonLog(session, names, result) {
+  const log = session.lessonLog;
+  for (let i = log.length - 1; i >= 0; i--) {
+    const l = log[i];
+    if (!l.result && Array.isArray(l.names) && l.names.length && names.every(n => l.names.includes(n))) { l.result = result; return; }
+  }
+}
+// 按课表自动考试模式轮询：上课时间自动开（标记 examModeAuto），离开上课时间只回收"自动开启"的状态；
+// 老师手动切换过（examMode 指令会清除 examModeAuto）的状态不回收，避免覆盖老师的主动操作
+function autoExamTickAll() {
+  for (const [roomId, room] of rooms) {
+    const cls = roster.classes[roomClassIndex(roomId, room)];
+    if (!cls || !cls.prefs || cls.prefs.autoExam === false) continue;   // 该班总开关关闭：不干预
+    const inClass = autoInClass(cls.tt);
+    if (inClass && !room.examMode) { room.examMode = true; room.examModeAuto = true; pushState(roomId); }
+    else if (!inClass && room.examMode && room.examModeAuto) { room.examMode = false; room.examModeAuto = false; pushState(roomId); }
+  }
+}
+
+// 返回当前班级当日有效的请假名单（过滤掉已不在名单中的名字）
+function absentNames(cls) {
+  if (!cls || !cls.absent || cls.absent.date !== todayStr()) return [];
+  return cls.absent.names.filter(n => cls.students.some(s => s.name === n));
+}
+
+/* ---------------- 多房间会话状态（不落盘，重启即清） ----------------
+ * 每个「房间」= 一个班级空间（一块大屏 + 一台控制手机）。
+ * URL ?room=X：X 是班级的房间ID(rid)，一个班级一个稳定ID；
+ * 切班 = 把 URL 换成目标班级的 rid（前端直接跳转，不再调用 classSwitch）。
+ * 同 room 两端联动；不同 room（不同班级）完全独立。默认 '1' 兼容老用法。
+ */
+function genRid(name, i) {
+  let h = 2166136261;
+  for (const ch of (name + '#' + i)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); }
+  return 'c' + (h >>> 0).toString(36);
+}
+const rooms = new Map();
+// 房间绑定班级：room 是某班级 rid 时，班级永远由 rid 决定（不受房间内切班状态影响，杜绝"串班"）
+function roomClassIndex(roomId, room) {
+  const idx = roster.classes.findIndex(c => c.rid === roomId);
+  return idx >= 0 ? idx : room.currentClass;
+}
+function getRoom(id) {
+  id = String(id || '1').slice(0, 24);
+  if (!rooms.has(id)) {
+    // room 是某班级的 rid 时，该房间直接绑定这个班级，并载入该班已保存的设置；否则用默认值
+    const idx = roster.classes.findIndex(c => c.rid === id);
+    const p = (idx >= 0 && roster.classes[idx].prefs) || {};
+    rooms.set(id, {
+      // room 是班级 rid 时绑定该班级；房间 '1'（无 room 尾缀的 URL）固定展示 classes[0]（示例班/首班），
+      // 不跟随全局 currentClass —— 否则上次切到加密班后，无参 URL 一打开就弹「班级密码锁」；
+      // 仅老式自定义房间（非 '1' 非 rid）沿用全局当前班
+      currentClass: idx >= 0 ? idx : (id === '1' ? 0 : Math.min(roster.currentClass || 0, roster.classes.length - 1)),
+      pickedThisRound: [],   // 本轮已点名单（不复读机用）
+      lastPick: null,        // {names:[...], at}
+      answering: null,       // {name, deadline, duration}
+      page: null,            // {names, sids, place, from, note, sentAt, confirmed, retracted}
+      examMode: false,
+      examModeAuto: false,   // true=由课表自动开启（下课可自动回收）；false=手动开关（自动逻辑不覆盖）
+      volume: p.volume !== undefined ? p.volume : 0.3,
+      animationMs: p.animationMs !== undefined ? p.animationMs : 3000,
+      rollStyle: 'classic',
+      voiceMode: p.voiceMode !== undefined ? p.voiceMode : 'sound',
+      lessonLog: [],         // 本节课点名记录
+      pageLog: [],           // 今日传呼记录
+      unlocked: {},          // 已解锁班级 { index: true }
+      rolling: false,        // 点名动画互斥标志（P0-3）
+      gen: 0,                // 会话代次：resetRound/切班/删班 bump 后在途动画回调自动失效
+      unlockFail: null       // 密码暴破限速计数 {n, until}（P1-7）
+    });
+  }
+  return rooms.get(id);
+}
+
+/* ---------------- SSE 客户端（按房间分组） ---------------- */
+const sseClients = new Set(); // { res, room }
+// 把某房间的音量/动画/提示方式写回其绑定班级的 prefs（rid 绑定才有归属；老式自定义房间不落盘）
+function saveClassPrefs(roomId, room) {
+  const idx = roster.classes.findIndex(c => c.rid === roomId);
+  if (idx >= 0) {
+    const cls = roster.classes[idx];
+    cls.prefs = cls.prefs || {};
+    cls.prefs.volume = room.volume;
+    cls.prefs.animationMs = room.animationMs;
+    cls.prefs.voiceMode = room.voiceMode;
+    saveRoster();
+  }
+}
+// 该房间当前班是否处于锁定态（按 sid 隔离：sid 未解锁就算锁定，sid 为空的旧客户端一律视为锁定）
+function isLocked(roomId, sid) {
+  const room = getRoom(roomId);
+  const cls = roster.classes[roomClassIndex(roomId, room)];
+  return !!(cls && hasPass(cls) && !(sid && room.unlocked[sid + ':' + cls.rid]));
+}
+function broadcast(roomId, event) {
+  const payload = `data: ${JSON.stringify(event)}\n\n`;
+  for (const c of sseClients) {
+    if (c.room !== roomId) continue;
+    if (isLocked(c.room, c.sid)) continue;   // 锁定中的连接不推事件数据（防名单/记录泄露）
+    try { c.res.write(payload); } catch (e) { sseClients.delete(c); }
+  }
+}
+function lanIPs() {
+  const out = [];
+  const nets = os.networkInterfaces();
+  for (const k of Object.keys(nets)) for (const n of nets[k]) if (n.family === 'IPv4' && !n.internal) out.push(n.address);
+  return out;
+}
+function pushState(roomId) {
+  for (const c of sseClients) {
+    if (c.room !== roomId) continue;
+    try { c.res.write(`data: ${JSON.stringify({ event: 'state', state: snapshot(c.room, c.sid) })}\n\n`); }
+    catch (e) { sseClients.delete(c); }
+  }
+}
+function snapshot(roomId, sid = '') {
+  const room = getRoom(roomId);
+  const cls = roster.classes[roomClassIndex(roomId, room)] || { name: '', students: [] };
+  const allClasses = roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: hasPass(c) }));
+  const curIdx = roomClassIndex(roomId, room);
+  const dirIdx = allClasses.findIndex(c => c.i === curIdx);
+  const currentClass = dirIdx >= 0 ? allClasses[dirIdx].i : curIdx;
+  // 班级密码门禁：本标签页未解锁时只回最小信息（名单/记录一概不给），前端弹密码框
+  if (isLocked(roomId, sid)) {
+    return {
+      locked: true, room: roomId, className: cls.name,
+      allClasses, currentClass, places: roster.places
+    };
+  }
+  const qs = roomId !== '1' ? '?room=' + encodeURIComponent(roomId) : '';
+  return {
+    ctrlUrls: lanIPs().map(ip => `http://${ip}:${PORT}/ctrl.html${qs}`),
+    className: cls.name,
+    groups: cls.groups || [],
+    students: cls.students.map(s => ({ name: s.name, sid: s.sid || '', group: s.group, weight: s.weight, pickedCount: s.pickedCount })),
+    allClasses,
+    currentClass,
+    tt: cls.tt || { am: 4, pm: 3, cells: {} },
+    showTt: cls.prefs ? cls.prefs.showTt !== false : true,
+    showMemos: cls.prefs ? !!cls.prefs.showMemos : false,
+    autoExam: cls.prefs ? cls.prefs.autoExam !== false : true,
+    notice: cls.notice || { text: '', at: 0 },
+    memos: cls.memos || [],
+    places: roster.places,
+    pickedThisRound: room.pickedThisRound,
+    lastPick: room.lastPick,
+    answering: room.answering,
+    page: room.page,
+    examMode: room.examMode,
+    volume: room.volume,
+    animationMs: room.animationMs,
+    rollStyle: room.rollStyle,
+    voiceMode: room.voiceMode,
+    absentToday: absentNames(cls),
+    lessonLog: room.lessonLog.slice(-20),
+    pageLog: room.pageLog.slice(-50)
+  };
+}
+
+/* ---------------- 加权抽取（按房间） ---------------- */
+function pickStudents(roomId, { group = null, count = 1, noRepeat = true } = {}) {
+  const room = getRoom(roomId);
+  const cls = roster.classes[roomClassIndex(roomId, room)];
+  if (!cls) return [];
+  const absent = absentNames(cls);
+  let pool = cls.students.filter(s => !group || s.group === group);
+  pool = pool.filter(s => !absent.includes(s.name)); // 今日请假自动跳过
+  pool = pool.filter(s => (s.weight || 0) > 0);      // 权重 0 = 长期不点，直接排除（这是"调0"真正的生效点）
+  if (noRepeat) {
+    const avail = pool.filter(s => !room.pickedThisRound.includes(s.name));
+    if (avail.length === 0) { room.pickedThisRound = []; pool = pool; } else pool = avail;
+  }
+  if (pool.length === 0) return [];
+  // 有效权重 = weight / (1 + pickedCount)：点过的人自动降权
+  const weighted = [];
+  for (const s of pool) {
+    const w = Math.max(0.01, (s.weight || 1) / (1 + (s.pickedCount || 0)));
+    weighted.push([s, w]);
+  }
+  const picked = [];
+  let n = Math.min(count, pool.length);
+  for (let k = 0; k < n; k++) {
+    let total = weighted.reduce((a, [s, w]) => a + w, 0);
+    let r = Math.random() * total, chosen = weighted[0][0], idx = 0;
+    for (let i = 0; i < weighted.length; i++) {
+      r -= weighted[i][1];
+      if (r <= 0) { chosen = weighted[i][0]; idx = i; break; }
+    }
+    weighted.splice(idx, 1);
+    picked.push(chosen);
+  }
+  return picked;
+}
+
+/* ---------------- 指令处理 ---------------- */
+function handleCmd(body, res, roomId, sid = '') {
+  const session = getRoom(roomId);
+  const cls = roster.classes[roomClassIndex(roomId, session)];
+  // 班级密码门禁：本标签页未解锁时只放行 unlockClass，其余指令一律拒绝
+  if (cls && hasPass(cls) && !session.unlocked[sid + ':' + cls.rid] && body.action !== 'unlockClass') {
+    res.end(JSON.stringify({ ok: false, msg: '需要班级密码' }));
+    return;
+  }
+  const find = (name) => cls && cls.students.find(s => s.name === name);
+  const disp = (s) => s.group ? `${s.name}(${s.group})` : s.name; // 显示名：带组名
+  const now = Date.now();
+  let ok = true, msg = '';
+  switch (body.action) {
+    case 'roll': {
+      if (session.answering) { ok = false; msg = '答题进行中'; break; }
+      if (session.rolling) { ok = false; msg = '点名动画进行中，请稍候'; break; }   // P0-3 互斥
+      const picked = pickStudents(roomId, body);
+      if (picked.length === 0) {
+        ok = false;
+        const allZero = cls.students.length > 0 && cls.students.every(s => (s.weight || 0) <= 0);
+        msg = allZero ? '该范围学生权重均为 0（点名单页改权重或清空请假）' : '该范围无可点名学生（可能全部请假或名单为空）';
+        break;
+      }
+      const names = picked.map(s => s.name);
+      const display = picked.map(disp);
+      const students = picked.map(s => ({ name: s.name, group: s.group || '' }));
+      // 滚动内容用全班姓名（排除当日请假），结果不提前泄漏
+      const pool = cls.students.map(s => s.name).filter(n => !absentNames(cls).includes(n));
+      picked.forEach(s => { s.pickedCount = (s.pickedCount || 0) + 1; session.pickedThisRound.push(s.name); });
+      logPush(session.lessonLog, { names, display, at: now });
+      broadcast(roomId, { event: 'rollStart', duration: session.animationMs, pool });
+      const dur = Math.max(500, session.animationMs);
+      session.rolling = true;
+      const g = session.gen;   // 记录发起代次
+      setTimeout(() => {
+        if (session.gen !== g) return;   // 期间 resetRound/切班/删班 → 弃用旧结果（P0-3）
+        session.rolling = false;
+        session.lastPick = { names, display, at: Date.now() };
+        session.answering = null;
+        saveRoster(); pushState(roomId);
+        broadcast(roomId, { event: 'rollResult', names, display, students });
+      }, dur);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, rolling: true }));
+      return;
+    }
+    case 'answerStart': {
+      if (!session.lastPick) { ok = false; msg = '请先点名'; break; }
+      const d = body.duration | 0; // 秒，0=不限时
+      session.answering = { name: (session.lastPick.display || session.lastPick.names).join('、'), deadline: d > 0 ? now + d * 1000 : 0, duration: d };
+      broadcast(roomId, { event: 'answerStart', duration: d });
+      break;
+    }
+    case 'mark': {
+      if (!session.answering) { ok = false; msg = '无答题中'; break; }
+      for (const n of session.lastPick.names) {
+        const s = find(n); if (!s) continue;
+        if (body.result === 'right') s.right = (s.right || 0) + 1;
+        else if (body.result === 'wrong') s.wrong = (s.wrong || 0) + 1;
+        else s.none = (s.none || 0) + 1;
+      }
+      // 每节课答题统计：答出(right/wrong) / 未答出(none)，按「节次_日期」累计
+      const sk = currentSlotKey(cls.tt);
+      if (sk !== null) {
+        cls.tt.stats = cls.tt.stats || {};
+        const tkey = sk + '_' + todayStr();
+        const st = cls.tt.stats[tkey] || { date: todayStr(), slot: sk, answered: 0, missed: 0, total: 0 };
+        st.total += session.lastPick.names.length;
+        if (body.result === 'right' || body.result === 'wrong') st.answered += session.lastPick.names.length;
+        else st.missed += session.lastPick.names.length;
+        cls.tt.stats[tkey] = st;
+      }
+      // 把判定结果写进「本节课记录」（控制端/大屏同步显示 ✅答对 / ❌答错 / 未答）
+      tagLessonLog(session, session.lastPick.names, body.result === 'right' ? 'right' : body.result === 'wrong' ? 'wrong' : 'none');
+      session.answering = null;
+      saveRoster();
+      broadcast(roomId, { event: 'marked', result: body.result });
+      break;
+    }
+    case 'skip': {
+      if (session.rolling) { ok = false; msg = '点名动画进行中，请稍候'; break; }   // P0-3
+      if (!session.lastPick) { ok = false; msg = '请先点名'; break; }
+      for (const n of session.lastPick.names) { const s = find(n); if (s) s.skipped = (s.skipped || 0) + 1; }
+      tagLessonLog(session, session.lastPick.names, 'skip');   // 跳过也记入本节课记录
+      const sk2 = currentSlotKey(cls.tt);
+      if (sk2 !== null) {
+        cls.tt.stats = cls.tt.stats || {};
+        const tkey2 = sk2 + '_' + todayStr();
+        const st2 = cls.tt.stats[tkey2] || { date: todayStr(), slot: sk2, answered: 0, missed: 0, total: 0 };
+        st2.total += session.lastPick.names.length;
+        st2.missed += session.lastPick.names.length;
+        cls.tt.stats[tkey2] = st2;
+      }
+      session.answering = null; session.lastPick = null;
+      saveRoster(); broadcast(roomId, { event: 'skipped' });
+      // 自动连抽下一名
+      const picked = pickStudents(roomId, { noRepeat: true });
+      if (picked.length) {
+        const names = picked.map(s => s.name);
+        const display = picked.map(disp);
+        const students = picked.map(s => ({ name: s.name, group: s.group || '' }));
+        const pool2 = cls.students.map(s => s.name).filter(n => !absentNames(cls).includes(n));
+        picked.forEach(s => { s.pickedCount = (s.pickedCount || 0) + 1; session.pickedThisRound.push(s.name); });
+        logPush(session.lessonLog, { names, display, at: Date.now() });
+        broadcast(roomId, { event: 'rollStart', duration: session.animationMs, pool: pool2 });
+        session.rolling = true;
+        const g2 = session.gen;
+        setTimeout(() => {
+          if (session.gen !== g2) return;   // 期间 resetRound/切班/删班 → 弃用旧结果（P0-3）
+          session.rolling = false;
+          session.lastPick = { names, display, at: Date.now() };
+          saveRoster(); pushState(roomId); broadcast(roomId, { event: 'rollResult', names, display, students });
+        }, Math.max(500, session.animationMs));
+      }
+      break;
+    }
+    case 'resetRound': {
+      session.pickedThisRound = []; session.lastPick = null; session.answering = null;
+      bumpGen(session);   // P0-3
+      break;
+    }
+    case 'page': {
+      // 姓名+学号成对校验：学号用于区分同名，无学号的学生 sids 为空串（兼容旧控制端）
+      const pairs = (body.names || []).map((n, i) => ({ n, s: (body.sids || [])[i] || '' })).filter(p => find(p.n));
+      const names = pairs.map(p => p.n), sids = pairs.map(p => p.s);
+      if (names.length === 0) { ok = false; msg = '学生不在名单内'; break; }
+      session.page = {
+        names, sids: sids.map(s => sanitize(s)), place: sanitize(String(body.place || '办公室')).slice(0, 20),
+        from: sanitize(String(body.from || '')).slice(0, 20),
+        note: sanitize(String(body.note || '')).slice(0, 30),
+        // 展示时长已固定：大屏端居中弹窗统一展示 5 秒后自动收起（不再由控制端配置）
+        sentAt: now, confirmed: false, retracted: false
+      };
+      logPush(session.pageLog, { names, sids: session.page.sids, place: session.page.place, from: session.page.from, sentAt: now, confirmed: false, retracted: false }, 100);
+      broadcast(roomId, { event: 'page', page: session.page });
+      break;
+    }
+    case 'pageConfirm': if (session.page) { session.page.confirmed = true; session.pageLog.forEach(p => { if (!p.retracted && !p.confirmed) p.confirmed = true; }); } break;
+    case 'pageRetract': if (session.page) { session.page.retracted = true; session.pageLog.forEach(p => { if (!p.confirmed) p.retracted = true; }); session.page = null; } break;
+    case 'examMode': session.examMode = !!body.on; session.examModeAuto = false; break;   // 手动切换：清除"自动开启"标记，自动逻辑不回收
+    // 班级设置：改动即写回班级 prefs 持久化（rid 绑定的房间），重启不丢
+    case 'setVolume': session.volume = Math.min(1, Math.max(0, +body.value || 0)); saveClassPrefs(roomId, session); break;
+    case 'setAnim': session.animationMs = [2000, 3000, 5000].includes(body.ms) ? body.ms : 3000; saveClassPrefs(roomId, session); break;
+    case 'setRollStyle': session.rollStyle = 'classic'; break; // 兼容旧指令，样式已固定
+    case 'setVoiceMode': session.voiceMode = ['sound', 'ai', 'both'].includes(body.mode) ? body.mode : 'sound'; saveClassPrefs(roomId, session); break;
+    // 班级课表：节数配置 / 单格课程 / 清空（存班级对象，持久化）
+    case 'ttConfig': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const am = Math.min(8, Math.max(1, body.am | 0));
+      const pm = Math.min(8, Math.max(1, body.pm | 0));
+      cls.tt = { am, pm, pre: cls.tt && cls.tt.pre ? 1 : 0, post: cls.tt && cls.tt.post ? 1 : 0, cells: cls.tt && cls.tt.cells ? cls.tt.cells : {}, times: cls.tt && cls.tt.times ? cls.tt.times : {} };
+      saveRoster(); msg = `课表已设为上午${am}节、下午${pm}节`;
+      break;
+    }
+    case 'ttExtra': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      if (body.pre !== undefined) cls.tt.pre = body.pre ? 1 : 0;
+      if (body.post !== undefined) cls.tt.post = body.post ? 1 : 0;
+      saveRoster(); msg = '已更新早读/晚托设置';
+      break;
+    }
+    case 'ttStatsClear': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      cls.tt.stats = {};
+      saveRoster(); msg = '答题统计已清空';
+      break;
+    }
+    case 'ttCell': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const day = body.day | 0;
+      const slotKey = String(body.slot);
+      const isExtra = slotKey === 'pre' || slotKey === 'post';
+      if (day < 1 || day > 5 || (!isExtra && (isNaN(+slotKey) || +slotKey < 0 || +slotKey >= (cls.tt.am + cls.tt.pm)))) { ok = false; msg = '无效位置'; break; }
+      const course = sanitize(String(body.course || '')).slice(0, 12);
+      if (course) cls.tt.cells[day + '_' + slotKey] = course; else delete cls.tt.cells[day + '_' + slotKey];
+      saveRoster();
+      break;
+    }
+    case 'ttClear': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      cls.tt.cells = {}; saveRoster(); msg = '课表已清空';
+      break;
+    }
+    case 'ttTime': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const slotKey = String(body.slot);
+      const isExtra = slotKey === 'pre' || slotKey === 'post';
+      if (!isExtra && (isNaN(+slotKey) || +slotKey < 0 || +slotKey >= (cls.tt.am + cls.tt.pm))) { ok = false; msg = '无效节次'; break; }
+      const start = String(body.start || '').trim().slice(0, 5);
+      const end = String(body.end || '').trim().slice(0, 5);
+      cls.tt.times = cls.tt.times || {};
+      if (start || end) cls.tt.times[slotKey] = { s: start, e: end };
+      else delete cls.tt.times[slotKey];
+      saveRoster();
+      break;
+    }
+    case 'setShowTt': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      cls.prefs = cls.prefs || {};
+      cls.prefs.showTt = !!body.on;
+      saveRoster(); msg = body.on ? '大屏已显示课表' : '大屏已隐藏课表';
+      break;
+    }
+    case 'setShowMemos': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      cls.prefs = cls.prefs || {};
+      cls.prefs.showMemos = !!body.on;
+      saveRoster(); msg = body.on ? '大屏已显示作业栏' : '大屏已隐藏作业栏';
+      break;
+    }
+    case 'setAutoExam': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      cls.prefs = cls.prefs || {};
+      cls.prefs.autoExam = !!body.on;
+      saveRoster(); msg = body.on ? '已开启：上课时间自动进入考试模式' : '已关闭：不再按课表自动切换考试模式';
+      break;
+    }
+    case 'setClassPass': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const g1 = lockGuard(session); if (g1) { ok = false; msg = g1; break; }
+      const old = String(body.old || '');
+      if (hasPass(cls) && !checkClassPass(cls, cls.rid, old)) { ok = false; msg = '原密码不正确'; markFail(session); break; }
+      const pass = sanitize(String(body.pass || '')).slice(0, 20);
+      if (pass) cls.passHash = sha256hex(PASS_SALT + cls.rid + '::' + pass);   // 只存哈希（P1-7）
+      else delete cls.passHash;
+      delete cls.pass;   // 明文不再保留
+      rooms.forEach(r => { r.unlocked = {}; });   // 改密后所有标签页的解锁全部失效
+      saveRoster();
+      markOk(session);
+      msg = pass ? '班级密码已设置' : '班级密码已移除';
+      break;
+    }
+    case 'setNotice': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const text = sanitize(String(body.text || '')).slice(0, 120);
+      cls.notice = { text, at: text ? Date.now() : 0 };
+      saveRoster(); msg = text ? '公告已发布' : '公告已清除';
+      break;
+    }
+    case 'classSwitch': {
+      const i = body.index | 0;
+      if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
+      const target = roster.classes[i];
+      // 有密码的班级：需输入密码（本会话解锁过则免）
+      if (hasPass(target) && !session.unlocked[sid + ':' + target.rid]) {
+        const g2 = lockGuard(session); if (g2) { ok = false; msg = g2; break; }
+        if (!checkClassPass(target, target.rid, body.pass)) { ok = false; msg = '需要班级密码'; markFail(session); break; }
+        markOk(session);
+      }
+      // '1' 房（无参 URL = 固定示例班）与 rid 绑定房：展示班由 URL 决定，切班仅解锁并跳转；
+      // 仅老式自定义浮动房间原地切班（session.currentClass 才会被展示逻辑用到）
+      if (roomId !== '1' && !roster.classes.some(c => c.rid === roomId)) session.currentClass = i;
+      roster.currentClass = i;
+      if (hasPass(target)) session.unlocked[sid + ':' + target.rid] = true;
+      saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null;
+      bumpGen(session);   // P0-3
+      break;
+    }
+    case 'renameClass': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const name = sanitize(String(body.name || '')).slice(0, 20);
+      if (!name) { ok = false; msg = '班级名称为空'; break; }
+      cls.name = name; saveRoster(); msg = `班级已改名为「${name}」`;
+      break;
+    }
+    case 'addClass': {
+      const name = sanitize(String(body.name || '')).slice(0, 20) || `新班级${roster.classes.length + 1}`;
+      const pass = sanitize(String(body.pass || '')).slice(0, 20);
+      const rid = genRid(name, roster.classes.length);
+      roster.classes.push({ name, rid, groups: [], students: [], absent: { date: '', names: [] }, passHash: pass ? sha256hex(PASS_SALT + rid + '::' + pass) : undefined });
+      roster.currentClass = roster.classes.length - 1;
+      if (roomId !== '1' && !roster.classes.some(c => c.rid === roomId)) session.currentClass = roster.currentClass;
+      if (pass) session.unlocked[sid + ':' + roster.classes[roster.currentClass].rid] = true;
+      session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
+      bumpGen(session);   // P0-3
+      saveRoster();
+      msg = pass ? `已创建班级「${name}」（已设置密码）` : `已创建班级「${name}」`;
+      break;
+    }
+    case 'delClass': {
+      if (roster.classes.length <= 1) { ok = false; msg = '至少保留一个班级'; break; }
+      if (body.confirm !== true) { ok = false; msg = '未确认删除'; break; }
+      const i = (body.index !== undefined) ? (body.index | 0) : roster.currentClass;
+      if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
+      // 有密码的班级：删除需密码
+      if (hasPass(roster.classes[i])) {
+        const g3 = lockGuard(session); if (g3) { ok = false; msg = g3; break; }
+        if (!checkClassPass(roster.classes[i], roster.classes[i].rid, body.pass)) { ok = false; msg = '需要班级密码'; markFail(session); break; }
+        markOk(session);
+      }
+      const nm = roster.classes[i].name, delRid = roster.classes[i].rid;
+      roster.classes.splice(i, 1);
+      if (roster.currentClass >= roster.classes.length) roster.currentClass = roster.classes.length - 1;
+      rooms.forEach(r => {
+        if (r.currentClass >= roster.classes.length) r.currentClass = roster.classes.length - 1;
+        for (const k of Object.keys(r.unlocked)) if (k.endsWith(':' + delRid)) delete r.unlocked[k];
+      });
+      session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
+      bumpGen(session);   // P0-3
+      saveRoster();
+      msg = `已删除班级「${nm}」`;
+      break;
+    }
+    case 'importRoster': {
+      // 支持格式：姓名 / 姓名,学号 / 姓名,组别,权重(旧) / 姓名,学号,组别 / 姓名,学号,组别,权重
+      const lines = String(body.text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const students = lines.map(l => {
+        const p = l.split(/[,，\t]/).map(x => x.trim());
+        let name = p[0], sid = '', group = '', weight = 1;
+        if (p.length >= 4) { sid = p[1]; group = p[2]; weight = parseFloat(p[3]) || 1; }
+        else if (p.length === 3) {
+          if (isNaN(parseFloat(p[2]))) { sid = p[1]; group = p[2]; }   // 姓名,学号,组别
+          else { group = p[1]; weight = parseFloat(p[2]) || 1; }        // 姓名,组别,权重（旧）
+        }
+        else if (p.length === 2) {
+          if (/^\d+$/.test(p[1])) sid = p[1]; else group = p[1];        // 姓名,学号 或 姓名,组别
+        }
+        return { name: sanitize(name), sid: sanitize(sid).slice(0, 20), group: sanitize(group).slice(0, 12), weight, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 };
+      }).filter(s => s.name);
+      if (students.length === 0) { ok = false; msg = '没有解析到有效名单'; break; }
+      const name = sanitize(String(body.className || '')).slice(0, 20) || `导入班${roster.classes.length + 1}`;
+      const groups = [...new Set(students.map(s => s.group).filter(Boolean))];
+      roster.classes.push({ name, rid: genRid(name, roster.classes.length), groups, students });
+      roster.currentClass = roster.classes.length - 1;
+      if (roomId !== '1' && !roster.classes.some(c => c.rid === roomId)) session.currentClass = roster.currentClass;
+      session.pickedThisRound = []; session.lastPick = null; session.answering = null;
+      saveRoster();
+      msg = `已导入「${name}」${students.length} 人`;
+      break;
+    }
+    case 'replaceRoster': {
+      // 替换已有班级的完整名单（保留 prefs/课表/公告等班级设置，统计清零）
+      const lines = String(body.text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const students = lines.map(l => {
+        const p = l.split(/[,，\t]/).map(x => x.trim());
+        let name = p[0], sid = '', group = '', weight = 1;
+        if (p.length >= 4) { sid = p[1]; group = p[2]; weight = parseFloat(p[3]) || 1; }
+        else if (p.length === 3) {
+          if (isNaN(parseFloat(p[2]))) { sid = p[1]; group = p[2]; }
+          else { group = p[1]; weight = parseFloat(p[2]) || 1; }
+        }
+        else if (p.length === 2) {
+          if (/^\d+$/.test(p[1])) sid = p[1]; else group = p[1];
+        }
+        return { name: sanitize(name), sid: sanitize(sid).slice(0, 20), group: sanitize(group).slice(0, 12), weight, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 };
+      }).filter(s => s.name);
+      if (students.length === 0) { ok = false; msg = '没有解析到有效名单'; break; }
+      const norm = s => String(s || '').replace(/[（）()]/g, '').trim();
+      let ci = -1;
+      if (body.rid) ci = roster.classes.findIndex(c => c.rid === String(body.rid));
+      if (ci < 0 && body.name) ci = roster.classes.findIndex(c => norm(c.name) === norm(body.name));
+      if (ci < 0) { ok = false; msg = '未找到目标班级'; break; }
+      const target = roster.classes[ci];
+      target.students = students;
+      target.groups = [...new Set(students.map(s => s.group).filter(Boolean))];
+      target.absent = { date: '', names: [] };
+      saveRoster();
+      msg = `已导入「${target.name}」${students.length} 人`;
+      break;
+    }
+    case 'addStudent': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const name = sanitize(String(body.name || '')).slice(0, 20);
+      const sidv = sanitize(String(body.sid || '')).slice(0, 20);
+      const grpv = sanitize(String(body.group || '')).slice(0, 12);
+      if (!name || find(name)) { ok = false; msg = '姓名为空或重复'; break; }
+      cls.students.push({ name, sid: sidv, group: grpv, weight: parseFloat(body.weight) || 1, pickedCount: 0, right: 0, wrong: 0, none: 0, skipped: 0 });
+      if (grpv && !cls.groups.includes(grpv)) cls.groups.push(grpv);
+      saveRoster();
+      break;
+    }
+    case 'setSid': {
+      const s = find(String(body.name || ''));
+      if (!s) { ok = false; msg = '学生不存在'; break; }
+      s.sid = sanitize(String(body.sid || '')).slice(0, 20);
+      saveRoster();
+      break;
+    }
+    case 'delStudent': {
+      if (!cls) break;
+      cls.students = cls.students.filter(s => s.name !== body.name);
+      saveRoster();
+      break;
+    }
+    case 'setWeight': {
+      const s = find(String(body.name || ''));
+      if (!s) { ok = false; msg = '学生不存在'; break; }
+      const w = parseFloat(body.weight);
+      if (isNaN(w) || w < 0 || w > 99) { ok = false; msg = '权重需在 0~99 之间'; break; }
+      s.weight = Math.round(w * 10) / 10;
+      saveRoster();
+      msg = w === 0 ? `${s.name} 已设为 0（不会被抽中）` : `${s.name} 权重已改为 ${s.weight}`;
+      break;
+    }
+    case 'setAbsent': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const names = (Array.isArray(body.names) ? body.names : []).filter(n => cls.students.some(s => s.name === n));
+      cls.absent = { date: todayStr(), names };
+      saveRoster();
+      msg = names.length ? `今日请假已保存：${names.join('、')}（点名时自动跳过）` : '今日无请假';
+      break;
+    }
+    case 'clearAbsent': {
+      if (!cls) break;
+      cls.absent = { date: '', names: [] };
+      saveRoster();
+      msg = '已清除今日请假名单';
+      break;
+    }
+    case 'addGroup': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const g = sanitize(String(body.name || '')).slice(0, 12);
+      if (!g) { ok = false; msg = '组名为空'; break; }
+      if (!cls.groups.includes(g)) { cls.groups.push(g); saveRoster(); msg = `已添加组「${g}」`; }
+      break;
+    }
+    case 'delGroup': {
+      if (!cls) break;
+      const g = String(body.name || '');
+      cls.groups = (cls.groups || []).filter(x => x !== g);
+      cls.students.forEach(s => { if (s.group === g) s.group = ''; }); // 组删了，学生保留
+      saveRoster();
+      msg = `已删除组「${g}」（学生保留，组别已清空）`;
+      break;
+    }
+    case 'addPlace': {
+      const p = sanitize(String(body.name || '')).slice(0, 20);
+      if (p && !roster.places.includes(p)) { roster.places.push(p); saveRoster(); }
+      break;
+    }
+    case 'resetStats': {
+      if (!cls) break;
+      cls.students.forEach(s => { s.pickedCount = 0; s.right = 0; s.wrong = 0; s.none = 0; s.skipped = 0; });
+      session.pickedThisRound = []; session.lessonLog = [];
+      saveRoster();
+      msg = '统计已清零';
+      break;
+    }
+    case 'unlockClass': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      if (!hasPass(cls)) break;   // 未加密班级无需解锁
+      // 暴破限速（P1-7）：正确密码随时可解锁并清计数；错误尝试在锁定窗口内被拦截
+      if (checkClassPass(cls, cls.rid, body.pass)) { session.unlocked[sid + ':' + cls.rid] = true; markOk(session); msg = '已解锁'; }
+      else {
+        const g4 = lockGuard(session);
+        if (g4) { ok = false; msg = g4; } else { ok = false; msg = '密码不正确'; markFail(session); }
+      }
+      break;
+    }
+    // 备忘录（按班级保存）：添加 / 勾选完成 / 删除 / 清除已完成
+    case 'memoAdd': {
+      if (!cls) { ok = false; msg = '无班级'; break; }
+      const text = sanitize(String(body.text || '')).slice(0, 200);
+      if (!text) { ok = false; msg = '内容为空'; break; }
+      cls.memos = cls.memos || [];
+      cls.memos.push({ id: now.toString(36) + Math.random().toString(36).slice(2, 6), text, at: now, done: false });
+      if (cls.memos.length > 100) cls.memos = cls.memos.slice(-100);
+      saveRoster(); msg = '已添加备忘';
+      break;
+    }
+    case 'memoToggle': {
+      if (!cls) break;
+      const m = (cls.memos || []).find(x => x.id === String(body.id || ''));
+      if (!m) { ok = false; msg = '备忘不存在'; break; }
+      m.done = !m.done; saveRoster();
+      break;
+    }
+    case 'memoDel': {
+      if (!cls) break;
+      cls.memos = (cls.memos || []).filter(x => x.id !== String(body.id || ''));
+      saveRoster();
+      break;
+    }
+    case 'memoClearDone': {
+      if (!cls) break;
+      cls.memos = (cls.memos || []).filter(x => !x.done);
+      saveRoster(); msg = '已清除已完成备忘';
+      break;
+    }
+    default: ok = false; msg = '未知指令';
+  }
+  pushState(roomId);
+  res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify({ ok, msg }));
+}
+
+/* ---------------- HTTP 服务 ---------------- */
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.txt': 'text/plain; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2' };
+// 文本类资源加 Content-Disposition：中文文件名 RFC 5987 编码 + 浏览器内联展示（不触发下载弹窗），避免乱码
+const TEXT_EXT_FOR_DISPOSITION = new Set(['.txt', '.md', '.json', '.html', '.js', '.css']);
+function readBody(req) {
+  return new Promise((resolve) => {
+    let d = '', over = false;
+    req.on('data', c => {
+      if (over) return;
+      d += c;
+      if (d.length > 1e6) { over = true; req.resume(); }   // 超限：丢弃后续数据，交由调用方回 413（P2-3）
+    });
+    req.on('end', () => {
+      if (over) return resolve({ _413: true });
+      try { resolve(JSON.parse(d || '{}')); } catch (e) { resolve({}); }
+    });
+    req.on('error', () => resolve({ _413: true }));
+  });
+}
+// PIN 访问校验（P1-4/去明文）：返回 'ok' 放行 / 'bad' 密码不符(401) / 'unset' 服务端未配置(503，fail-closed)
+function pinOK(url, req) {
+  if (PIN === undefined) return 'unset';
+  if (PIN === '') return 'ok';
+  const p = url.searchParams.get('pin') || req.headers['x-pin'] || '';
+  return p === String(PIN) ? 'ok' : 'bad';
+}
+function denyPin(res, st, asJson) {
+  const code = st === 'unset' ? 503 : 401;
+  const msg = st === 'unset' ? '服务端未配置访问密码（DJT_PIN 或 .djt_pin），已拒绝访问以防名单裸奔' : '需要访问密码';
+  if (asJson) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, msg })); }
+  res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end(msg);
+}
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://x');
+  // P1-1：非法/未知房间号一律归一到 '1'（房间=班级rid 或 默认 '1'），防 rooms Map 无限膨胀
+  let roomId = url.searchParams.get('room') || '1';
+  if (roomId !== '1' && !(roster.classes.some(c => c.rid === roomId))) roomId = '1';
+  const sid = String(url.searchParams.get('sid') || '');   // 浏览器标签页会话 id：解锁态按标签页隔离
+  if (url.pathname === '/events') {
+    const _ps = pinOK(url, req);
+    if (_ps !== 'ok') { denyPin(res, _ps, false); return; }
+    res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
+    res.write(`data: ${JSON.stringify({ event: 'state', state: snapshot(roomId, sid) })}\n\n`);
+    const client = { res, room: roomId, sid };
+    sseClients.add(client);
+    req.on('close', () => sseClients.delete(client));
+    return;
+  }
+  if (url.pathname === '/api/cmd' && req.method === 'POST') {
+    const _ps = pinOK(url, req);
+    if (_ps !== 'ok') { denyPin(res, _ps, true); return; }
+    const body = await readBody(req);
+    if (body && body._413) { res.writeHead(413, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, msg: '请求体过大' })); }
+    return handleCmd(body, res, roomId, sid);
+  }
+  if (url.pathname === '/api/state') {
+    const _ps = pinOK(url, req);
+    if (_ps !== 'ok') { denyPin(res, _ps, true); return; }
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end(JSON.stringify(snapshot(roomId, sid)));
+  }
+  // 静态文件
+  let p = url.pathname === '/' ? '/screen.html' : url.pathname;
+  const file = path.join(PUBLIC, path.normalize(p).replace(/^([.][.][/\\])+/, ''));
+  if (!file.startsWith(PUBLIC)) { res.writeHead(403); return res.end(); }
+  fs.readFile(file, (err, data) => {
+    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('404 Not Found'); }
+    const ext = path.extname(file).toLowerCase();
+    const ct = MIME[ext] || 'application/octet-stream';
+    const headers = { 'Content-Type': ct, 'Cache-Control': 'no-cache' };
+    if (TEXT_EXT_FOR_DISPOSITION.has(ext)) {
+      const baseName = path.basename(file);
+      const enc = encodeURIComponent(baseName).replace(/['()]/g, escape).replace(/\*/g, '%2A');
+      headers['Content-Disposition'] = `inline; filename="${baseName.replace(/[\r\n"]/g, '_')}"; filename*=UTF-8''${enc}`;
+    }
+    res.writeHead(200, headers);
+    res.end(data);
+  });
+});
+server.on('error', (e) => {
+  if (e.code === 'EADDRINUSE') {
+    console.error(`[ERROR] 端口 ${PORT} 已被占用！请先关闭旧的服务窗口（黑底窗口），再重新运行本程序。`);
+    console.error('        （或换端口：先 set PORT=8081 再运行 node server.js）');
+    process.exit(1);
+  }
+  throw e;
+});
+server.listen(PORT, '0.0.0.0', () => {
+  console.log('==============================================');
+  console.log('  课堂互动大屏服务已启动（零依赖 · 离线可用）');
+  console.log(`  大屏页(本机): http://localhost:${PORT}/screen.html`);
+  console.log('  教师端候选地址（手机连哪个网就用哪个，含USB网络共享/热点）:');
+  for (const ip of lanIPs()) console.log(`    http://${ip}:${PORT}/ctrl.html`);
+  if (PIN === undefined) {
+    console.log('  ⚠️  未设置访问密码！已锁定 /api 与 /events（防名单裸奔）。');
+    console.log('      请先运行 启动.bat 并输入密码（将保存到 .djt_pin），');
+    console.log('      或手动：set DJT_PIN=你的密码 后重新启动。');
+  } else {
+    console.log(`  访问密码: ${PIN === '' ? '(已显式关闭鉴权，仅限本机调试!)' : '已启用（DJT_PIN / .djt_pin）'}`);
+  }
+  console.log('==============================================');
+});
+// 按课表自动考试模式：每 20 秒轮询一次。pushState 内部只推送"有活跃大屏/控制端连接"的房间，
+// 无人使用的房间（无 SSE 连接）即使轮询到也只是空转，不产生任何外部影响
+setInterval(autoExamTickAll, 20000);
