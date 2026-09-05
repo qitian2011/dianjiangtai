@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>课堂互动 · 教师控制端</title>
+<link rel="stylesheet" href="style.css?v=37">
+<script src="theme.js?v=37"></script>
+</head>
+<body>
+<div class="ctrl-wrap">
+  <div class="ctrl-header">
+    <select id="classSel" class="class-sel"></select>
+    <div class="class-actions">
+      <a class="btn small" href="download.html" title="下载桌面版客户端与资料">⬇ 下载</a>
+      <button class="btn small" id="addClassBtn" title="新建班级">➕ 新建</button>
+      <button class="btn small" id="delClassBtn" title="删除当前班级" style="color:#ff5d5d">🗑 删除</button>
+      <button class="btn small" id="renameClassBtn" title="修改当前班级名称">✏️ 改名</button>
+    </div>
+    <span class="badge" id="connBadge">连接中…</span>
+    <label class="switch exam-switch"><input type="checkbox" id="examChk">考试模式</label>
+  </div>
+
+  <div class="tabs">
+    <button data-tab="roll" class="active">点名答题</button>
+    <button data-tab="page">传呼</button>
+    <button data-tab="roster">名单</button>
+    <button data-tab="tt">课表</button>
+    <button data-tab="set">设置</button>
+  </div>
+
+  <!-- ============ 点名答题 ============ -->
+  <div id="tab-roll">
+    <div class="card">
+      <h3>抽取范围</h3>
+      <div class="row"><div class="count-select" style="flex:1" id="groupChips"></div></div>
+      <div class="row"><div class="count-select" style="flex:1" id="countChips">
+        <span class="chip sel" data-n="1">1 人</span><span class="chip" data-n="2">2 人</span>
+        <span class="chip" data-n="3">3 人</span><span class="chip" data-n="4">4 人</span>
+      </div></div>
+      <div class="row">
+        <label class="switch"><input type="checkbox" id="noRepeatChk" checked>不复读机（本轮不重复）</label>
+        <button class="btn small" id="resetRoundBtn">重置本轮</button>
+      </div>
+    </div>
+    <button class="btn primary big" id="rollBtn">🎲 随 机 点 名</button>
+    <div class="card" style="margin-top:14px">
+      <h3>今日请假（点名自动跳过）<span class="badge" id="absentBadge" style="background:#7a2c2c;color:#ffd7d7"></span></h3>
+      <div id="absentSummary" style="font-size:14px;color:var(--dim)"></div>
+      <div class="row" id="absentEdit" style="display:none; margin-top:10px"></div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn small" id="absentToggleBtn">✍️ 编辑请假名单</button>
+        <button class="btn small" id="absentClearBtn">清空今日请假</button>
+      </div>
+    </div>
+    <div class="card result-card" id="pickResult" style="display:none; margin-top:14px">
+      <div class="names" id="pickNames"></div>
+      <div class="cd-line" id="pickCdLine" style="display:none">
+        <div class="pick-cd" id="pickCd">—</div>
+        <div class="pick-cd-tag" id="pickCdTag"></div>
+      </div>
+      <div class="row" style="justify-content:center; margin-top:14px" id="answerBtns">
+        <button class="btn success" id="askBtn">🎤 请回答</button>
+        <button class="btn warn" id="skipBtn">跳过TA →</button>
+      </div>
+      <div class="row" style="justify-content:center; margin-top:8px" id="timerBtns" style="display:none">
+        <span class="chip" data-d="30">30秒</span><span class="chip sel" data-d="60">1分钟</span>
+        <span class="chip" data-d="120">2分钟</span><span class="chip" data-d="0">不限</span>
+      </div>
+      <div class="row" style="justify-content:center" id="markBtns" style="display:none">
+        <button class="btn success" data-m="right">答对</button>
+        <button class="btn danger" data-m="wrong">答错</button>
+        <button class="btn" data-m="none">未答</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>本节课记录</h3>
+      <ul class="history" id="lessonList"><li>暂无</li></ul>
+    </div>
+  </div>
+
+  <!-- ============ 传呼 ============ -->
+  <div id="tab-page" style="display:none">
+    <div class="card">
+      <h3>1 · 选择学生（可多选）</h3>
+      <input type="text" id="stuSearch" placeholder="🔍 输入姓名或学号搜索">
+      <div class="row" id="pageStudents" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h3>2 · 去处</h3>
+      <div class="row" id="placeChips"></div>
+      <div class="row">
+        <input type="text" id="newPlace" placeholder="新增去处…" style="flex:1">
+        <button class="btn small" id="addPlaceBtn">添加</button>
+      </div>
+      <div class="row"><input type="text" id="fromInput" placeholder="找哪位老师？（如：李老师）" value=""></div>
+      <div class="row"><input type="text" id="noteInput" placeholder="留言（选填，≤30字）" maxlength="30"></div>
+    </div>
+    <div class="card">
+      <h3>3 · 传呼说明</h3>
+      <div style="font-size:13px; color:var(--dim); line-height:1.8">
+        传呼发出后，大屏居中弹窗统一展示 <b>5 秒</b>后自动收起；未点「✅ 已到」的传呼会保留在右下角堆叠，也可在下方的「当前传呼」中确认或撤回。
+      </div>
+    </div>
+    <button class="btn danger big" id="pageBtn">📢 发 送 传 呼</button>
+    <div class="card" id="activePage" style="display:none">
+      <h3>当前传呼</h3>
+      <div id="activePageInfo" style="font-size:17px; font-weight:700"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn success" id="confirmBtn">✅ 已到</button>
+        <button class="btn danger" id="retractBtn">❌ 撤回</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>今日传呼记录</h3>
+      <ul class="history" id="pageLogList"><li>暂无</li></ul>
+    </div>
+  </div>
+
+  <!-- ============ 名单 ============ -->
+  <div id="tab-roster" style="display:none">
+    <div class="card">
+      <h3>分组管理（自定义组名，删除组不影响学生）</h3>
+      <div class="row" id="groupManage"></div>
+      <div class="row">
+        <input type="text" id="newGroup" placeholder="新组名（如：第1组 / 男生 / 后排）" style="flex:1">
+        <button class="btn small primary" id="addGroupBtn">添加组</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>粘贴导入新班级（一行一名；格式：姓名,学号,组别,权重 或 姓名,学号,组别 / 姓名,组别,权重）</h3>
+      <textarea id="importText" placeholder="张三,2024001,第1组,1&#10;李四,2024002,第2组,2&#10;王五&#10;……"></textarea>
+      <div class="row"><input type="text" id="importName" placeholder="班级名称（如：初一(3)班）" style="flex:1">
+      <button class="btn primary" id="importBtn">导入</button></div>
+    </div>
+    <div class="card">
+      <h3>添加单个学生</h3>
+      <div class="row"><input type="text" id="addName" placeholder="姓名" style="flex:1">
+      <input type="text" id="addSid" placeholder="学号" style="width:110px"></div>
+      <div class="row"><input type="text" id="addGroup" placeholder="组别（选填，可用下方已建组名）" style="flex:1" list="groupDatalist">
+      <datalist id="groupDatalist"></datalist>
+      <input type="text" id="addWeight" placeholder="权重" style="width:80px" value="1">
+      <button class="btn small primary" id="addStuBtn">添加</button></div>
+    </div>
+    <div class="card">
+      <h3>当前班级学生（点击 × 删除）</h3>
+      <div class="stu-list" id="stuList"></div>
+      <div class="row" style="margin-top:10px"><button class="btn small danger" id="resetStatsBtn">清零统计</button></div>
+    </div>
+  </div>
+
+  <!-- ============ 课表 ============ -->
+  <div id="tab-tt" style="display:none">
+    <div class="card">
+      <h3>📢 公告栏（发布后大屏待机页常驻显示，按班级保存）</h3>
+      <textarea id="noticeText" rows="2" maxlength="120" placeholder="输入公告内容，如：今天下午第三节课后交作业" style="width:100%"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn small primary" id="noticeSaveBtn">📢 发布公告</button>
+        <button class="btn small danger" id="noticeClearBtn">清除公告</button>
+        <span style="font-size:12px; color:var(--dim)">最长 120 字</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>📝 备忘录（待办 / 课堂笔记，按班级保存）</h3>
+      <div class="row">
+        <input type="text" id="memoInput" maxlength="200" placeholder="记点什么…（如：周五收研学回执）" style="flex:1">
+        <button class="btn small primary" id="memoAddBtn">添加</button>
+      </div>
+      <ul class="history" id="memoList" style="margin-top:8px"><li>暂无</li></ul>
+      <div class="row" style="margin-top:6px">
+        <button class="btn small" id="memoClearDoneBtn">清除已完成</button>
+        <label class="switch" style="margin-left:auto"><input type="checkbox" id="showMemosChk"> 在大屏显示作业栏</label>
+      </div>
+      <div style="font-size:12px; color:var(--dim); margin-top:8px">勾选=已完成，×=删除，最长 200 字/条。开启后大屏待机页常驻显示<b>未完成</b>的备忘录作为作业栏，做完勾掉即从大屏消失（按班级保存）</div>
+    </div>
+    <div class="card">
+      <h3>节次设置</h3>
+      <div class="row" style="align-items:center; gap:8px">
+        <span>上午</span>
+        <button class="btn small" id="ttAmMinus">−</button>
+        <b id="ttAmVal" style="min-width:20px; text-align:center">4</b>
+        <button class="btn small" id="ttAmPlus">＋</button>
+        <span>节</span>
+        <span style="width:16px"></span>
+        <span>下午</span>
+        <button class="btn small" id="ttPmMinus">−</button>
+        <b id="ttPmVal" style="min-width:20px; text-align:center">3</b>
+        <button class="btn small" id="ttPmPlus">＋</button>
+        <span>节</span>
+        <span style="flex:1"></span>
+        <button class="btn small danger" id="ttClearBtn">🗑 清空课表</button>
+      </div>
+      <div class="row" style="align-items:center; gap:8px; margin-top:12px">
+        <label class="switch"><input type="checkbox" id="ttPreChk">早读课</label>
+        <span style="width:16px"></span>
+        <label class="switch"><input type="checkbox" id="ttPostChk">晚托课</label>
+        <span style="font-size:12px; color:var(--dim)">开启后大屏课表首行显示早读、末行显示晚托，可分别填课程与时间</span>
+      </div>
+      <div style="font-size:13px; color:var(--dim); margin-top:8px">课表按班级保存，大屏直接显示整周课表；格子留空表示无课。</div>
+    </div>
+    <div class="card">
+      <h3>每节课时间（可选，大屏课表会显示）</h3>
+      <div id="ttTimes"></div>
+      <div style="font-size:13px; color:var(--dim); margin-top:8px">为每一节设置上课/下课时间，格式如 8:00。时间可只填开始或只填结束；两格都清空则不显示。</div>
+    </div>
+    <div class="card">
+      <h3>今日答题统计（按当前上课时间自动归入对应节次）</h3>
+      <div id="ttStats"></div>
+      <div class="row" style="margin-top:8px; align-items:center">
+        <button class="btn small danger" id="ttStatsClearBtn">🗑 清空今日统计</button>
+        <span style="font-size:12px; color:var(--dim)">答题标记「答对/答错」计入回答出来，「未作答/跳过」计入没回答出来。</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>一周课程表（在格子里直接填课程名，改完自动保存）</h3>
+      <div id="ttGrid"></div>
+    </div>
+  </div>
+
+  <!-- ============ 设置 ============ -->
+  <div id="tab-set" style="display:none">
+    <div class="card" id="autoLaunchCard">
+      <h3>💻 本机桌面版 · 开机自启动 <span class="badge" id="alEnvBadge" style="background:rgba(10,132,255,.18);color:var(--accent);display:none">桌面版</span></h3>
+      <div id="alDesktop">
+        <label class="switch"><input type="checkbox" id="autoLaunchChk"> 开机时自动运行点将台</label>
+        <div style="font-size:13px; color:var(--dim); margin-top:10px; margin-bottom:6px">自启动后打开哪个界面：</div>
+        <div class="count-select" id="autoLaunchModeChips">
+          <span class="chip sel" data-m="ctrl">📱 控制端（教师页）</span>
+          <span class="chip" data-m="screen">🖥 大屏端（展示页）</span>
+        </div>
+        <div style="font-size:12.5px; color:var(--dim); margin-top:10px; line-height:1.7">
+          开启后 Windows 登录即自动运行，无需手动双击。<b>大屏端模式</b>适合教室一体机：开机直接进大屏待机/课表展示，控制端收进系统托盘待命（点托盘图标可唤起）。<br>
+          此设置保存在本机，换电脑需重新勾选；也可在系统托盘菜单「开机自动启动」处快速开关。
+        </div>
+      </div>
+      <div id="alBrowser" style="display:none; font-size:13px; color:var(--dim); line-height:1.8">
+        开机自启动是 <b>Windows 桌面版</b>功能。当前是在浏览器里打开的，请在电脑上安装桌面版后使用 →
+        <a href="download.html" style="color:var(--accent); text-decoration:none; font-weight:700">⬇ 下载桌面版</a>
+      </div>
+    </div>
+    <div class="card">
+      <h3>班级密码（设置后：切换班级 / 删除该班 都需要密码）</h3>
+      <div style="font-size:13px; color:var(--dim); margin-bottom:8px" id="classPassStatus">当前：未加密</div>
+      <div class="row">
+        <button class="btn small primary" id="setClassPassBtn">🔒 设置/修改密码</button>
+        <button class="btn small danger" id="clearClassPassBtn">🔓 移除密码</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>抽取动画时长</h3>
+      <div class="count-select" id="animChips">
+        <span class="chip" data-ms="2000">快 2秒</span><span class="chip sel" data-ms="3000">标准 3秒</span><span class="chip" data-ms="5000">仪式感 5秒</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>大屏课表显示</h3>
+      <label class="switch"><input type="checkbox" id="showTtChk"> 在大屏待机页显示本周课表</label>
+      <div style="font-size:13px; color:var(--dim); margin-top:8px">关闭后大屏只显示公告，不显示课表（按班级保存）</div>
+    </div>
+    <div class="card">
+      <h3>⏰ 上课自动考试模式</h3>
+      <label class="switch"><input type="checkbox" id="autoExamChk" checked> 按课表：上课时间自动开启考试模式</label>
+      <div style="font-size:13px; color:var(--dim); margin-top:8px">工作日上课时段（每节课时间配全了开始/下课时间的节次）自动开启考试模式，下课自动恢复。<b>考试模式下传呼不弹大窗、不发声</b>，只在右下角小字提示。若本节课不考试，请先关闭此总开关再手动使用（按班级保存）</div>
+    </div>
+    <div class="card">
+      <h3>大屏提示方式（点名结果 / 传呼 / 答题计时）</h3>
+      <div class="count-select" id="voiceChips">
+        <span class="chip sel" data-m="sound">🔔 仅提示音</span><span class="chip" data-m="ai">🗣️ 仅AI播报</span><span class="chip" data-m="both">🔔+🗣️ 都要</span>
+      </div>
+      <div style="font-size:13px; color:var(--dim); margin-top:8px">🔔 提示音始终播放（音量在下方调节）；此项控制是否额外用 AI 中文语音喊出学生姓名（使用 Windows 自带离线语音，无需联网）<span id="voiceStatus" style="color:var(--dim)"></span></div>
+    </div>
+    <div class="card">
+      <h3>大屏提示音量：<span id="volText">30%</span></h3>
+      <input type="range" id="volSlider" min="0" max="100" value="30" style="width:100%">
+    </div>
+    <div class="card">
+      <h3>外观（跟随系统 / 浅色 / 深色）</h3>
+      <div class="count-select" id="themeChips">
+        <span class="chip" data-t="auto">🌓 跟随系统</span><span class="chip" data-t="light">☀️ 浅色</span><span class="chip" data-t="dark">🌙 深色</span>
+      </div>
+      <div style="font-size:13px; color:var(--dim); margin-top:8px">跟随系统：随电脑/手机的系统外观自动切换；大屏与控制端实时同步</div>
+    </div>
+    <div class="card">
+      <h3>连接信息</h3>
+      <div style="font-size:14px; color:var(--dim); line-height:1.8" id="connInfo"></div>
+    </div>
+  </div>
+</div>
+<!-- 点名结果大弹窗 -->
+<div class="modal-overlay" id="pickModal" style="display:none">
+  <div class="modal-card">
+    <button class="modal-close" id="pickModalClose">×</button>
+    <div class="modal-label">🎯 被点到的是</div>
+    <div class="modal-names" id="pickModalNames"></div>
+    <div class="modal-actions" id="pickModalAsk">
+      <button class="btn success big" id="pickModalAskBtn">🎤 请回答</button>
+      <button class="btn warn" id="pickModalSkipBtn">跳过TA →</button>
+    </div>
+    <div id="pickModalTimers" style="display:none">
+      <div class="modal-label" style="margin-bottom:8px">选择倒计时（大屏开始计时）</div>
+      <div class="count-select" id="pickModalTimerChips" style="justify-content:center">
+        <span class="chip" data-d="30">30秒</span><span class="chip sel" data-d="60">1分钟</span>
+        <span class="chip" data-d="120">2分钟</span><span class="chip" data-d="0">不限</span>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- 班级密码锁定屏（直接打开加密班级 URL 时出现） -->
+<div class="modal-overlay" id="lockOverlay" style="display:none">
+  <div class="modal-card">
+    <div class="modal-label">🔒 <span id="lockClassName"></span> 已加密</div>
+    <div style="font-size:12px; color:#999; margin:2px 0 0">本班老师设置了「班级访问密码」；这不是云端访问密码</div>
+    <input type="text" id="lockPass" placeholder="输入班级访问密码" style="width:100%; margin:12px 0; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); font-size:16px">
+    <div class="modal-actions">
+      <button class="btn primary big" id="lockBtn">🔓 解锁</button>
+      <button class="btn" id="lockSwitchBtn">切换其他班级</button>
+    </div>
+    <div id="lockMsg" style="color:#ff8a8a; font-size:13px; margin-top:8px; min-height:18px"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script src="ctrl.js?v=37"></script>
+</body>
+</html>
