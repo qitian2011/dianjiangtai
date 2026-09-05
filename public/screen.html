@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>课堂互动大屏 · 展示端</title>
+<link rel="stylesheet" href="style.css?v=37">
+<script src="theme.js?v=37"></script>
+</head>
+<body class="screen">
+  <!-- 传呼横条（缩小常驻） -->
+  <div class="page-banner" id="pageBanner" style="display:none">
+    <span>📢 传呼中：</span><span class="bn-name" id="bnName"></span>
+    <span id="bnPlace"></span><span id="bnNote" style="color:#bcd0ee"></span>
+  </div>
+  <!-- 考试模式角落条 -->
+  <div class="exam-strip" id="examStrip" style="display:none">📢 传呼：<span id="examText"></span></div>
+  <!-- 本节课点名录 -->
+  <div class="lesson-log" id="lessonLog"></div>
+
+  <div class="topbar">
+    <div class="tb-left">
+      <span class="cls" id="className" title="点击切换班级">—</span>
+      <span class="cls-hint">⇅ 切班</span>
+    </div>
+    <div class="tb-right">
+      <span id="clock"></span>
+      <button class="tb-dl" id="dlBtn" title="下载桌面版客户端与资料" onclick="window.open('download.html','_blank')">⬇</button>
+    </div>
+  </div>
+
+  <!-- 声音解锁提示（浏览器自动播放策略：必须有一次屏幕点击才允许出声） -->
+  <div class="unlock-overlay" id="unlockOverlay">
+    <div class="unlock-card">
+      <div class="unlock-bell">🔊</div>
+      <div class="unlock-text">点击屏幕任意位置开启声音</div>
+      <div class="unlock-sub">点名提示音 / 传呼铃声 / AI 播报 都需要这一步</div>
+    </div>
+  </div>
+
+  <!-- 连接失败提示（网址错 / 被墙 / 密码错 / 断网时出现） -->
+  <div class="unlock-overlay" id="connError" style="display:none">
+    <div class="unlock-card">
+      <div class="unlock-bell">📡</div>
+      <div class="unlock-text">无法连接服务器</div>
+      <div class="unlock-sub">
+        请检查：<br>
+        ① 网址是 <b>qitian.dpdns.org</b>（不要用 workers.dev）<br>
+        ② <span id="connErrTip">云端访问密码是否正确</span><br>
+        ③ 设备是否联网
+      </div>
+      <div class="unlock-sub" style="margin-top:2vmin; color:var(--accent); cursor:pointer" onclick="location.reload()">⟳ 点这里刷新重试</div>
+    </div>
+  </div>
+
+  <!-- 班级密码锁定（直接打开加密班级 URL 时出现） -->
+  <div class="unlock-overlay" id="classLock" style="display:none">
+    <div class="unlock-card">
+      <div class="unlock-bell">🔒</div>
+      <div class="unlock-text">「<span id="classLockName"></span>」已加密</div>
+      <div class="unlock-sub">输入班级访问密码解锁；也可在教师控制端解锁，解锁后本页自动进入</div>
+      <div class="unlock-sub" style="margin-top:2vmin; display:flex; gap:1vmin; justify-content:center; align-items:center">
+        <input type="text" id="classLockPass" placeholder="班级访问密码" style="padding:1.2vmin 2vmin; border-radius:1.2vmin; border:1px solid rgba(255,255,255,.25); background:rgba(255,255,255,.08); color:#fff; font-size:2.4vmin; width:32vmin">
+        <button id="classLockBtn" style="padding:1.2vmin 3vmin; border-radius:1.2vmin; border:none; background:#0a84ff; color:#fff; font-size:2.4vmin; cursor:pointer">解锁</button>
+      </div>
+      <div class="unlock-sub" id="classLockMsg" style="color:#ff8a8a; min-height:2.6vmin"></div>
+    </div>
+  </div>
+
+  <div class="center" id="center">
+    <!-- 待机：课表常驻展示 -->
+    <div id="standby">
+      <div class="standby-row">
+        <div class="notice-panel" id="noticePanel" style="display:none">
+          <div class="np-title">📢 公告</div>
+          <div class="np-body" id="noticeTextEl"></div>
+        </div>
+        <div class="notice-panel" id="memoPanel" style="display:none">
+          <div class="np-title">📝 作业栏</div>
+          <div class="np-body" id="memoBodyEl"></div>
+        </div>
+        <div class="tt-panel" id="standbyTt"></div>
+      </div>
+      <div class="qr-corner" id="qrCorner"></div>
+    </div>
+    <!-- 滚动：经典滚动 -->
+    <div id="rolling" style="display:none">
+      <div class="title">随 机 点 名</div>
+      <div class="roll-name" id="rollName">……</div>
+    </div>
+    <!-- 结果 -->
+    <div id="result" style="display:none">
+      <div class="title">被 点 到 的 是</div>
+      <div class="result-names" id="resultNames"></div>
+      <div class="result-groups" id="resultGroups"></div>
+      <div class="hint" id="resultHint">请回答问题</div>
+    </div>
+    <!-- 答题计时 -->
+    <div id="answering" style="display:none">
+      <div class="answer-name">请 <b id="ansName"></b> 回答问题</div>
+      <div class="countdown" id="countdown">60</div>
+    </div>
+  </div>
+
+  <!-- 传呼全屏通知 -->
+  <div class="page-overlay" id="pageOverlay" style="display:none">
+    <div class="page-card">
+      <div class="bell">🔔</div>
+      <div class="p-name" id="pName"></div>
+      <div class="p-place" id="pPlace"></div>
+      <div class="p-note" id="pNote"></div>
+      <div class="p-from" id="pFrom"></div>
+    </div>
+  </div>
+
+  <!-- 传呼待处理堆叠（右下角，未点"已到"的传呼在此累积） -->
+  <div class="page-stack" id="pageStack"></div>
+
+  <!-- 班级选择（大屏端） -->
+  <div class="class-overlay" id="classOverlay" style="display:none">
+    <div class="class-card">
+      <div class="cc-title">选 择 班 级</div>
+      <div id="classList"></div>
+      <div class="cc-close" id="classClose">✕ 关闭</div>
+    </div>
+  </div>
+
+  <div class="s-toast" id="screenToast"></div>
+
+<script src="vendor/qrcode.min.js?v=37"></script>
+<script src="screen.js?v=37"></script>
+</body>
+</html>
