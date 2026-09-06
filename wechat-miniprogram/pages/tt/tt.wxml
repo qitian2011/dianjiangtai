@@ -1,0 +1,133 @@
+<view class="page-root {{themeClass}}">
+<classbar classes="{{dirClasses}}" curIdx="{{s.currentClass || 0}}" bindswitch="onSwitch" />
+
+<!-- 连接失败/连接中 兜底卡（不再白屏）：s 为 null 时必有可见反馈 -->
+<view class="card" wx:if="{{!s}}">
+  <view wx:if="{{errTxt}}" class="err" style="font-weight:600">⚠ 连接云端失败</view>
+  <view wx:elif="{{!errTxt}}" class="muted">正在连接云端…</view>
+  <view wx:if="{{errTxt}}" class="muted mt6" style="font-size:12px">{{errTxt}}</view>
+  <view class="row-gap mt10" wx:if="{{errTxt}}">
+    <view class="btn btn-sm" bindtap="onRetry">重试</view>
+    <view class="spacer"></view>
+    <view class="btn btn-sm btn-light" bindtap="goConnect">⚙ 连接设置</view>
+  </view>
+  <!-- 首次使用无需云端密码：PIN 由 proxy 云函数注入 -->
+</view>
+
+<lockoverlay show="{{s && s.locked}}" name="{{(s && s.className) || ''}}" bind:unlocked="onSwitch" />
+
+<block wx:if="{{s && !s.locked}}">
+  <!-- 公告栏 -->
+  <view class="card">
+    <view class="label">📢 公告栏（发布后大屏待机页常驻显示，按班级保存）</view>
+    <textarea class="textarea" style="height:70px" maxlength="120" placeholder="输入公告内容，如：今天下午第三节课后交作业" value="{{noticeText}}" bindinput="onNotice" bindfocus="onEditFocus" />
+    <view class="row-gap mt8">
+      <view class="btn btn-sm" bindtap="onNoticeSave">📢 发布公告</view>
+      <view class="btn btn-sm btn-danger" bindtap="onNoticeClear">清除公告</view>
+      <view class="spacer"></view>
+      <text class="tip">最长 120 字</text>
+    </view>
+  </view>
+
+  <!-- 备忘录 -->
+  <view class="card">
+    <view class="row-gap">
+      <text class="label" style="margin:0">📝 备忘录（待办 / 课堂笔记）</text>
+      <view class="spacer"></view>
+      <view class="btn btn-sm btn-light" bindtap="onMemoClearDone">清已完成</view>
+    </view>
+    <view class="row-gap mt8">
+      <input class="field" style="flex:1" placeholder="记点什么…（如：周五收研学回执）" value="{{memoText}}" bindinput="onMemo" maxlength="200" />
+      <view class="btn btn-sm" bindtap="onMemoAdd">添加</view>
+    </view>
+    <view wx:if="{{!memosV.length}}" class="empty">暂无备忘</view>
+    <view wx:for="{{memosV}}" wx:key="id" class="log-item">
+      <checkbox checked="{{item.done}}" color="#185FA5" style="transform:scale(.8)" data-id="{{item.id}}" bindchange="onMemoToggle" />
+      <text class="{{item.done ? 'done-line' : ''}}">{{item.text}}</text>
+      <view class="spacer"></view>
+      <text class="log-time">{{item.timeTxt}}</text>
+      <text class="del" data-id="{{item.id}}" catchtap="onMemoDel">✕</text>
+    </view>
+    <view class="row-gap mt6">
+      <text class="muted" style="font-size:13px">在大屏显示未完成备忘（作业栏）</text>
+      <switch checked="{{s.showMemos}}" color="#185FA5" style="transform:scale(.8)" bindchange="onShowMemos" />
+    </view>
+  </view>
+
+  <!-- 节次设置 -->
+  <view class="card">
+    <view class="row-gap">
+      <text class="label" style="margin:0">节次设置</text>
+      <view class="spacer"></view>
+      <view class="btn btn-sm btn-danger" bindtap="onTtClear">清空课表</view>
+    </view>
+    <view class="row-gap mt8">
+      <text>上午</text>
+      <view class="chip" bindtap="onAmMinus">−</view>
+      <text style="font-weight:700;min-width:22px;text-align:center">{{s.tt.am}}</text>
+      <view class="chip" bindtap="onAmPlus">＋</view>
+      <text>节</text>
+      <view class="spacer"></view>
+      <text>下午</text>
+      <view class="chip" bindtap="onPmMinus">−</view>
+      <text style="font-weight:700;min-width:22px;text-align:center">{{s.tt.pm}}</text>
+      <view class="chip" bindtap="onPmPlus">＋</view>
+      <text>节</text>
+    </view>
+    <view class="row-gap mt8">
+      <text class="muted" style="font-size:13px">早读课</text>
+      <switch checked="{{!!s.tt.pre}}" color="#185FA5" style="transform:scale(.8)" bindchange="onPre" />
+      <view class="spacer"></view>
+      <text class="muted" style="font-size:13px">晚托课</text>
+      <switch checked="{{!!s.tt.post}}" color="#185FA5" style="transform:scale(.8)" bindchange="onPost" />
+    </view>
+    <view class="tip mt6">课表按班级保存；格子留空=无课。早读/晚托开启后可分别填课程与时间。</view>
+  </view>
+
+  <!-- 每节时间 -->
+  <view class="card">
+    <view class="label">每节课时间（可选，大屏课表会显示；格式 8:00）</view>
+    <view wx:for="{{times}}" wx:key="key" class="log-item">
+      <text style="width:56px">{{item.label}}</text>
+      <input class="t-in" placeholder="开始" value="{{item.s}}" data-key="{{item.key}}" bindinput="onTimeS" bindblur="onTimeSBlur" bindfocus="onEditFocus" />
+      <text class="muted">–</text>
+      <input class="t-in" placeholder="结束" value="{{item.e}}" data-key="{{item.key}}" bindinput="onTimeE" bindblur="onTimeEBlur" bindfocus="onEditFocus" />
+      <view class="spacer"></view>
+      <text class="tip">两格清空=不显示</text>
+    </view>
+  </view>
+
+  <!-- 今日答题统计 -->
+  <view class="card">
+    <view class="row-gap">
+      <text class="label" style="margin:0">今日答题统计</text>
+      <view class="spacer"></view>
+      <view class="btn btn-sm btn-danger" bindtap="onStatsClear">清空</view>
+    </view>
+    <view wx:if="{{!todayStats.length}}" class="empty">今日暂无统计（答对/答错后按当前节次自动计入）</view>
+    <view wx:for="{{todayStats}}" wx:key="slot" class="log-item">
+      <text style="min-width:56px">{{item.label}}</text>
+      <text class="tag tag-right">答出 {{item.answered}}</text>
+      <text class="tag tag-none">未答出 {{item.missed}}</text>
+      <view class="spacer"></view>
+      <text class="log-time">共 {{item.total}}</text>
+    </view>
+  </view>
+
+  <!-- 一周课程表 -->
+  <view class="card">
+    <view class="label">一周课程表（格内直接填课程名，离开格子自动保存）</view>
+    <view class="tt-head">
+      <view class="tt-col head"></view>
+      <view wx:for="{{dayNames}}" wx:key="*this" class="tt-col head">{{item}}</view>
+    </view>
+    <view wx:for="{{grid}}" wx:key="key" wx:for-index="ri" wx:for-item="r" class="tt-row">
+      <view class="tt-col head">{{r.label}}</view>
+      <input wx:for="{{r.row}}" wx:key="day" wx:for-index="di" wx:for-item="cell"
+        class="tt-cell" value="{{cell.val}}"
+        data-ri="{{ri}}" data-di="{{di}}" data-day="{{cell.day}}" data-key="{{r.key}}"
+        bindinput="onCellInput" bindblur="onCellBlur" bindfocus="onEditFocus" maxlength="12" />
+    </view>
+  </view>
+</block>
+</view>

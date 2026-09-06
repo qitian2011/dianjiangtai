@@ -1,0 +1,176 @@
+/* ============ 主题色板 ============
+   page{} 内为「浅色」默认值；.theme-dark 容器内覆盖为「深色」。
+   页面根节点统一挂 <view class="page-root {{themeClass}}">，
+   themeClass 由 utils/theme.js 的 touch() 写入（'' 或 'theme-dark'）。
+   CSS 变量沿节点树继承，可穿透自定义组件（classbar / lockoverlay）。 */
+
+page {
+  /* 浅色（默认）；背景不在此写死：page 宿主元素无法被 .theme-dark 覆盖，
+     改为透出窗口背景（由 theme.js 的 wx.setBackgroundColor 随主题动态设置），
+     保证深色模式滚动回弹/页面转场也不露浅色底。 */
+  --bg: #F2F4FA;
+  --card: #FFFFFF;
+  --card-2: #EEF1F8;      /* chip / 弱底 */
+  --text: #1A2233;
+  --title: #17326B;       /* 强调标题 */
+  --sub: #6B7590;         /* label / muted */
+  --tip: #8A93A8;         /* 弱提示 */
+  --line: #F0F2F8;        /* 行分隔 */
+  --line-2: #D7DCE8;      /* 输入边框 */
+  --brand: #185FA5;
+  --brand-w: #E6F1FB;     /* brand 弱底（btn-light） */
+  --on-brand: #FFFFFF;
+  --danger: #C0392B;
+  --danger-w: #FBE3E0;
+  --ok: #1E8E4E;
+  --ok-w: #E2F4E9;
+  --warn: #B7791F;
+  --warn-w: #FFF3DC;
+  --lock: #A33;
+  --lock-w: #F7E8E8;
+  --shadow: rgba(20, 30, 60, 0.06);
+  --mask: rgba(15, 22, 42, 0.55);   /* 锁屏遮罩 */
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.theme-dark {
+  --bg: #12151D;
+  --card: #1E222D;
+  --card-2: #2A3040;
+  --text: #E8ECF4;
+  --title: #9FC2E8;
+  --sub: #9AA3B8;
+  --tip: #6B7590;
+  --line: #2A3040;
+  --line-2: #3A4255;
+  --brand: #4D9FE8;
+  --brand-w: #16283B;
+  --on-brand: #FFFFFF;
+  --danger: #E0655A;
+  --danger-w: #3A2222;
+  --ok: #53C07B;
+  --ok-w: #1B3226;
+  --warn: #D9A244;
+  --warn-w: #382D17;
+  --lock: #E06B6B;
+  --lock-w: #3A2228;
+  --shadow: rgba(0, 0, 0, 0.35);
+  --mask: rgba(0, 0, 0, 0.7);
+}
+
+/* 页面根容器：铺满并承载背景/文字 */
+.page-root {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  box-sizing: border-box;
+}
+
+/* ============ 通用组件 ============ */
+
+.card {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 16px 14px;
+  margin: 10px 12px;
+  box-shadow: 0 1px 4px var(--shadow);
+}
+.card-tight { margin: 6px 12px; }
+.label { font-size: 13px; color: var(--sub); margin-bottom: 8px; font-weight: 500; }
+.muted { color: var(--sub); font-size: 13px; }
+.tip { color: var(--tip); font-size: 12px; }
+.hl { color: var(--brand); font-weight: 600; }
+.err { color: var(--danger); }
+.ok { color: var(--ok); }
+
+.btn {
+  background: var(--brand);
+  color: var(--on-brand);
+  border-radius: 10px;
+  font-size: 16px;
+  padding: 12px 0;
+  text-align: center;
+  border: none;
+  line-height: 1.4;
+}
+.btn::after { border: none; }
+.btn[disabled] { opacity: 0.5; }
+.btn-sm { font-size: 14px; padding: 8px 0; display: inline-block; width: auto; padding-left: 16px; padding-right: 16px; border-radius: 999px; }
+.btn-light { background: var(--brand-w); color: var(--brand); }
+.btn-warn { background: var(--warn); color: #FFF; }
+.btn-danger { background: var(--danger); color: #FFF; }
+.btn-success { background: var(--ok); color: #FFF; }
+.btn-big { font-size: 18px; padding: 14px 0; font-weight: 600; }
+
+.field {
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: var(--card);
+  font-size: 15px;
+  color: var(--text);
+}
+.textarea {
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  height: 96px;
+}
+
+.row { display: flex; align-items: center; }
+.row-gap { display: flex; align-items: center; gap: 8px; }
+.spacer { flex: 1; }
+.mt6 { margin-top: 6px; } .mt8 { margin-top: 8px; } .mt10 { margin-top: 10px; } .mt14 { margin-top: 14px; }
+
+.chip {
+  display: inline-block;
+  padding: 6px 14px;
+  margin: 4px 8px 4px 0;
+  border-radius: 999px;
+  background: var(--card-2);
+  color: var(--text);
+  font-size: 13px;
+}
+.chip.on { background: var(--brand); color: var(--on-brand); }
+.chip.lock { background: var(--lock-w); color: var(--lock); }
+.chip.lock.on { background: var(--lock); color: #FFF; }
+
+.history { margin-top: 4px; }
+.log-item {
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.log-item:last-child { border-bottom: none; }
+.log-time { color: var(--tip); font-size: 11px; }
+.tag {
+  font-size: 11px; border-radius: 6px; padding: 1px 6px;
+}
+.tag-right { background: var(--ok-w); color: var(--ok); }
+.tag-wrong { background: var(--danger-w); color: var(--danger); }
+.tag-none { background: var(--card-2); color: var(--sub); }
+.tag-skip { background: var(--warn-w); color: var(--warn); }
+.tag-lock { background: var(--lock-w); color: var(--lock); }
+
+.empty { text-align: center; color: var(--tip); font-size: 13px; padding: 18px 0; }
+
+/* 主题适配补充类（替换 wxml 中硬编码的内联颜色） */
+.title-big   { font-size: 26px; font-weight: 700; color: var(--title); text-align: center; line-height: 1.4; }
+.title-mid   { font-size: 20px; font-weight: 600; color: var(--title); text-align: center; }
+.warn-big    { text-align: center; color: var(--warn); font-weight: 700; font-size: 16px; margin-top: 4px; }
+.tip-center  { text-align: center; color: var(--tip); padding: 6px 0; }
+.abs-badge   { background: var(--danger); color: #FFF; border-radius: 999px; padding: 1px 10px; font-size: 12px; line-height: 1.6; }
+.abs-row     { display: flex; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.done-line   { text-decoration: line-through; color: var(--tip); }
+.danger-txt  { color: var(--danger); }

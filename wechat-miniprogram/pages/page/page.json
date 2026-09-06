@@ -1,0 +1,4 @@
+{
+  "navigationBarTitleText": "传呼",
+  "usingComponents": { "classbar": "/components/classbar/classbar", "lockoverlay": "/components/lockoverlay/lockoverlay" }
+}

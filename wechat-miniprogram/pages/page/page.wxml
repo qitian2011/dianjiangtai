@@ -1,0 +1,86 @@
+<view class="page-root {{themeClass}}">
+<classbar classes="{{dirClasses}}" curIdx="{{s.currentClass || 0}}" bindswitch="onSwitch" />
+
+<!-- 班级已加密：全屏锁屏（对齐 Ctrl 网页 #lockOverlay），解锁或切换班级 -->
+<lockoverlay show="{{s && s.locked}}" name="{{(s && s.className) || ''}}" bind:unlocked="onSwitch" />
+
+<!-- 连接失败/连接中 兜底卡（不再白屏）：s 为 null 时必有可见反馈 -->
+<view class="card" wx:if="{{!s}}">
+  <view wx:if="{{errTxt}}" class="err" style="font-weight:600">⚠ 连接云端失败</view>
+  <view wx:elif="{{!errTxt}}" class="muted">正在连接云端…</view>
+  <view wx:if="{{errTxt}}" class="muted mt6" style="font-size:12px">{{errTxt}}</view>
+  <view class="row-gap mt10" wx:if="{{errTxt}}">
+    <view class="btn btn-sm" bindtap="onRetry">重试</view>
+    <view class="spacer"></view>
+    <view class="btn btn-sm btn-light" bindtap="goConnect">⚙ 连接设置</view>
+  </view>
+  <!-- 首次使用无需云端密码：PIN 由 proxy 云函数注入 -->
+</view>
+
+<!-- 1 选学生 -->
+<view class="card" wx:if="{{s && !s.locked}}">
+  <view class="row-gap">
+    <text class="label" style="margin:0">1 · 选择学生（可多选）</text>
+    <view class="spacer"></view>
+    <view class="tip">{{selected.length}} 已选</view>
+  </view>
+  <input class="field" placeholder="🔍 输入姓名或学号搜索" value="{{kw}}" bindinput="onKw" confirm-type="search" />
+  <view class="muted mt6" wx:if="{{selected.length}}" style="font-size:12px">已选：</view>
+  <view wx:if="{{selected.length}}" style="margin-top:2px">
+    <view wx:for="{{selected}}" wx:key="name" class="chip on" data-i="{{index}}" bindtap="onUnpick">{{item.name}}{{item.sid ? '·' + item.sid : ''}} ✕</view>
+  </view>
+  <view style="max-height:230px;overflow-y:auto;margin-top:6px">
+    <view wx:for="{{shown}}" wx:key="name" class="log-item" data-i="{{index}}" bindtap="onPick">
+      <text style="font-size:15px">{{item.name}}</text>
+      <text class="muted" wx:if="{{item.group}}">[{{item.group}}]</text>
+      <text class="log-time" wx:if="{{item.sid}}">学号 {{item.sid}}</text>
+      <view class="spacer"></view>
+      <view class="btn btn-sm {{item.sel ? 'btn-light' : ''}}" style="padding:3px 14px" data-i="{{index}}" bindtap="onPick">{{item.sel ? '已选' : '+ 选'}}</view>
+    </view>
+    <view wx:if="{{!shown.length}}" class="empty">无匹配学生</view>
+  </view>
+</view>
+
+<!-- 2 去处 -->
+<view class="card" wx:if="{{s && !s.locked}}">
+  <view class="label">2 · 去处</view>
+  <view class="chip {{selPlace === '' ? 'on' : ''}}" data-p="" bindtap="onPlace">（未选）</view>
+  <view wx:for="{{s.places}}" wx:key="*this" class="chip {{selPlace === item ? 'on' : ''}}" data-p="{{item}}" bindtap="onPlace">{{item}}</view>
+  <view class="row-gap mt8">
+    <input class="field" style="flex:1" placeholder="新增去处…" value="{{newPlace}}" bindinput="onNewPlace" />
+    <view class="btn btn-sm" bindtap="onAddPlace">添加</view>
+  </view>
+  <input class="field mt8" placeholder="找哪位老师？（如：李老师）" value="{{from}}" bindinput="onFrom" maxlength="20" />
+  <input class="field mt8" placeholder="留言（选填，≤30字）" value="{{note}}" bindinput="onNote" maxlength="30" />
+  <view class="tip mt6">传呼发出后大屏居中弹窗展示 5 秒自动收起；未确认的保留在右下角堆叠，可在「当前传呼」确认或撤回。</view>
+  <button class="btn btn-big btn-danger mt10" disabled="{{!selected.length || !selPlace}}" bindtap="onSend">📢 发 送 传 呼</button>
+</view>
+
+<!-- 当前传呼 -->
+<view class="card" wx:if="{{s && !s.locked && s.page && !s.page.retracted}}">
+  <view class="label">当前传呼<text class="tag tag-skip" style="margin-left:6px" wx:if="{{s.page.confirmed}}">已到</text></view>
+  <view style="font-size:17px;font-weight:700;color:var(--title)">{{pageNamesTxt}} → {{s.page.place}}</view>
+  <view class="muted" wx:if="{{s.page.from || s.page.note}}">{{s.page.from ? ('找：' + s.page.from + '  ') : ''}}{{s.page.note ? ('留言：' + s.page.note) : ''}}</view>
+  <view class="tip" style="margin-top:2px">{{pageSentTxt}} 发出<text wx:if="{{s.page.confirmed}}"> · 已确认到齐</text></view>
+  <view class="row-gap mt10">
+    <view class="btn btn-sm btn-success" disabled="{{s.page.confirmed}}" bindtap="onConfirm">✅ 已到</view>
+    <view class="spacer"></view>
+    <view class="btn btn-sm btn-danger" bindtap="onRetract">❌ 撤回</view>
+  </view>
+</view>
+
+<!-- 今日传呼记录 -->
+<view class="card" wx:if="{{s && !s.locked}}">
+  <view class="label">今日传呼记录</view>
+  <view wx:if="{{!pageLogV.length}}" class="empty">暂无</view>
+  <view wx:for="{{pageLogV}}" wx:key="sentAt" class="log-item">
+    <text>{{item.namesTxt}}</text>
+    <text class="muted">→{{item.place}}</text>
+    <text class="tag tag-right" wx:if="{{item.confirmed}}">已到</text>
+    <text class="tag tag-none" wx:if="{{!item.confirmed && item.retracted}}">已撤回</text>
+    <text class="tag tag-skip" wx:if="{{!item.confirmed && !item.retracted}}">进行中</text>
+    <view class="spacer"></view>
+    <text class="log-time">{{item.timeTxt}}</text>
+  </view>
+</view>
+</view>

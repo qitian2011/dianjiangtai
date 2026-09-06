@@ -257,6 +257,17 @@ export class Room {
       }
     } catch (e) { /* 失败时沿用缓存 */ }
   }
+  // 目录新鲜度守卫：班级实例常驻热实例的 dir 缓存不会自动感知「主实例新建/改名/删除班级」，
+  // 导致下拉框长期只有旧班级而无法切换（2026-09-06 修复：?room=c31ieon 看不到「示例」班）。
+  // 节流 20 秒拉一次主实例目录；首包立即拉（冷启动 initClass 后首次 state/events 请求即同步）。
+  async ensureDirFresh() {
+    if (this.mode !== 'class') return;
+    const now = Date.now();
+    if (!this._dirAt) { this._dirAt = now; await this.refreshDir(); return; }
+    if (now - this._dirAt < 20000) return;
+    this._dirAt = now;   // 先占位防并发重入
+    await this.refreshDir();
+  }
   // 班级实例数据落盘：自身存储 + 异步回写主实例镜像（主实例保持全量最新，供目录/引导/备份）
   saveRoster() {
     if (this.mode === 'class') {
@@ -310,8 +321,10 @@ export class Room {
       const idx = this.roster.classes.findIndex(c => c.rid === id);
       const p = (idx >= 0 && this.roster.classes[idx].prefs) || {};
       this.rooms.set(id, {
-        // room 是班级 rid 时绑定该班级；否则沿用全局当前班（DO 休眠重启后会话重建，避免回落到第 0 班）
-        currentClass: idx >= 0 ? idx : Math.min(this.roster.currentClass || 0, this.roster.classes.length - 1),
+        // room 是班级 rid 时绑定该班级；房间 '1'（无 room 尾缀的 URL）固定展示 classes[0]（示例班/首班），
+        // 不跟随全局 currentClass —— 否则上次切到加密班后，无参 URL 一打开就弹「班级密码锁」；
+        // 仅老式自定义房间（非 '1' 非 rid）沿用全局当前班
+        currentClass: idx >= 0 ? idx : (id === '1' ? 0 : Math.min(this.roster.currentClass || 0, this.roster.classes.length - 1)),
         pickedThisRound: [], lastPick: null, answering: null, page: null,
         examMode: false,
         examModeAuto: false,   // true=由课表自动开启（下课可自动回收）；false=手动开关（自动逻辑不覆盖）
@@ -745,7 +758,10 @@ export class Room {
           if (!(await checkClassPass(target, target.rid, body.pass))) { ok = false; msg = '需要班级密码'; markFail(session); break; }
           markOk(session);
         }
-        session.currentClass = i; roster.currentClass = i;
+        // '1' 房（无参 URL = 固定示例班）与 rid 绑定房：展示班由 URL 决定，切班仅解锁并跳转；
+        // 仅老式自定义浮动房间原地切班（session.currentClass 才会被展示逻辑用到）
+        if (roomId !== '1' && !roster.classes.some(c => c.rid === roomId)) session.currentClass = i;
+        roster.currentClass = i;
         if (hasPass(target)) session.unlocked[sid + ':' + target.rid] = true;
         this.saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null;
         bumpGen(session);   // P0-3：切班后旧班在途动画回调作废
@@ -762,7 +778,8 @@ export class Room {
         const name = sanitize(String(body.name || '')).slice(0, 20) || `新班级${roster.classes.length + 1}`;
         const pass = sanitize(String(body.pass || '')).slice(0, 20);
         roster.classes.push({ name, rid: this.genRid(name, roster.classes.length), groups: [], students: [], absent: { date: '', names: [] }, passHash: pass ? await sha256hex(PASS_SALT + this.genRid(name, roster.classes.length) + '::' + pass) : undefined });
-        roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
+        roster.currentClass = roster.classes.length - 1;
+        if (roomId !== '1' && !roster.classes.some(c => c.rid === roomId)) session.currentClass = roster.currentClass;
         if (pass) session.unlocked[sid + ':' + roster.classes[roster.currentClass].rid] = true;
         session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
         bumpGen(session);   // P0-3
@@ -820,7 +837,8 @@ export class Room {
         const name = sanitize(String(body.className || '')).slice(0, 20) || `导入班${roster.classes.length + 1}`;
         const groups = [...new Set(students.map(x => x.group).filter(Boolean))];
         roster.classes.push({ name, rid: this.genRid(name, roster.classes.length), groups, students });
-        roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
+        roster.currentClass = roster.classes.length - 1;
+        if (roomId !== '1' && !roster.classes.some(c => c.rid === roomId)) session.currentClass = roster.currentClass;
         session.pickedThisRound = []; session.lastPick = null; session.answering = null;
         this.saveRoster();
         msg = `已导入「${name}」${students.length} 人`;
@@ -998,6 +1016,8 @@ export class Room {
     }
     // 失效班级实例（rid 在主实例中不存在）：返回 404，前端自动回退首页
     if (this.invalid) return json({ ok: false, msg: '房间不存在或已失效' }, 404);
+    // 班级实例：入口请求前确保班级目录新鲜（新建/改名/删除班级 ≤20s 同步到下拉框，解决无法切班）
+    try { await this.ensureDirFresh(); } catch (e) { /* 守卫失败不影响主流程 */ }
     // 主实例内部端点（仅 DO 间通过 service binding 调用；Worker 入口不转发 /internal/*，公网不可达）
     if (this.mode === 'main' && url.pathname === '/internal/dir') {
       return json({
@@ -1057,11 +1077,14 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === '/') return Response.redirect(url.origin + '/screen.html', 302);
     if (url.pathname === '/events' || url.pathname.startsWith('/api/')) {
-      if (env.PIN) {
-        const pin = url.searchParams.get('pin') || req.headers.get('x-pin') || '';
-        if (pin !== env.PIN) {
-          return json({ ok: false, msg: '需要访问密码' }, 401);
-        }
+      if (!env.PIN) {
+        // fail-closed（去明文化 2026-09-04）：PIN 走 `wrangler secret put PIN` / `--var PIN:xxx` 注入，
+        // 未配置一律 503，杜绝忘配导致公网名单/操作裸奔
+        return json({ ok: false, msg: '服务端未配置访问密码（PIN），请联系管理员设置' }, 503);
+      }
+      const pin = url.searchParams.get('pin') || req.headers.get('x-pin') || '';
+      if (pin !== env.PIN) {
+        return json({ ok: false, msg: '需要访问密码' }, 401);
       }
       const roomId = url.searchParams.get('room') || '1';
       let name = 'main';

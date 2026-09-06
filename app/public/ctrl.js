@@ -7,15 +7,21 @@ const $ = id => document.getElementById(id);
 
 /* ---------- 工具 ---------- */
 const ROOM = new URLSearchParams(location.search).get('room') || '1';
+// 无 room 参数打开控制端时自动进入的默认班级 rid（2026-09-06：/ctrl 直达示例班）
+// 仅当该 rid 出现在返回的班级目录中才跳转；班级被删除则留在 room '1' 首班兜底（防 404→自愈→再跳 死循环）
+const DEFAULT_CTRL_ROOM = 'ct3z3h2';
 // 标签页会话 id：解锁态按标签页隔离（sessionStorage 关标签即清）——新开页面/新设备打开加密班级 URL 必弹密码框
 const SID = (() => { let s = sessionStorage.getItem('djSid'); if (!s) { s = 's' + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('djSid', s); } return s; })();
-async function cmd(body) {
+async function cmd(body, _again) {
   const pin = localStorage.getItem('djPin') || '';
   const r = await fetch(`/api/cmd?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (r.status === 401) {
-    const p = prompt('请输入访问密码');
-    if (p !== null) { localStorage.setItem('djPin', p); return cmd(body); }
-    return { ok: false };
+    // 云端访问密码 ≠ 班级密码：后者在本班「设置」页配置，前者是部署者设的全局口令
+    const p = prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
+    if (p === null) return { ok: false };
+    localStorage.setItem('djPin', p);
+    if (_again) { toast('云端访问密码不正确，请核对后重试'); return { ok: false }; }
+    return cmd(body, true);
   }
   const j = await r.json();
   if (j.msg) toast(j.msg);
@@ -24,19 +30,29 @@ async function cmd(body) {
 function toast(t) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => el.style.display = 'none', 2200); }
 function timeStr(ts) { const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 
-/* ---------- SSE（携带访问密码，?room=X 指定房间） ---------- */
+/* ---------- SSE（携带访问密码，?room=X 指定班级；无 room 默认打开示例班） ---------- */
 let es = null;
-let roomNormalized = false;   // 打开时无 room 参数 → 自动跳到当前班级专属链接（只跳一次）
 async function initSSE() {
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
-  // 服务器未设密码（PIN 为空）时直接放行；设了密码且未通过则弹一次，取消就不再反复弹
-  const r0 = await fetch(`/api/state?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`).catch(() => null);
-  if (r0 && r0.status === 401) {
-    const p = prompt('请输入访问密码');
-    if (p !== null) { pin = p; localStorage.setItem('djPin', p); }
+  // 云端访问密码校验（最多重输 3 次，取消即中止不再打扰）：通过才连 SSE。
+  // 注意「云端访问密码」是部署者设置的全局口令，与本班老师设置的「班级密码」是两个不同的密码。
+  let authed = false;
+  for (let i = 0; i < 3 && !authed; i++) {
+    const r0 = await fetch(`/api/state?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`).catch(() => null);
+    if (r0 && r0.status === 404) { location.replace(location.pathname); return; }   // 房间失效：回首页自愈
+    if (!r0 || r0.status !== 401) { authed = true; break; }                          // 通过（或无服务器）
+    const p = prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
+    if (p === null) {
+      $('connBadge').textContent = '● 未连接（未输入云端访问密码）'; $('connBadge').style.background = '#7a1d1d';
+      return;
+    }
+    pin = p; localStorage.setItem('djPin', p);
   }
-  // 房间不存在/已失效（如班级被删除）：回首页自愈
-  if (r0 && r0.status === 404) { location.replace(location.pathname); return; }
+  if (!authed) {
+    $('connBadge').textContent = '● 云端访问密码错误'; $('connBadge').style.background = '#7a1d1d';
+    toast('云端访问密码不正确：请联系部署者获取（该密码不是班级密码）');
+    return;
+  }
   es = new EventSource(`/events?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`);
   // 8 秒内没收到状态 → 提示（网址错/被墙/密码错/断网）
   setTimeout(() => {
@@ -51,12 +67,14 @@ async function initSSE() {
     initSSE._gotState = true;
     const m = JSON.parse(e.data);
     if (m.event === 'state') {
-      S = m.state; render(); maybeShowPickModal();
-      if (!roomNormalized && !/room=/.test(location.search)) {
-        roomNormalized = true;
-        const cur = (S.allClasses || []).find(c => c.i === S.currentClass);
-        if (cur && cur.rid) location.replace(location.pathname + '?room=' + encodeURIComponent(cur.rid));
+      S = m.state;
+      // 无 room 参数打开：自动进入默认班级房间（地址栏同步变成 ?room=xxx）
+      if (!new URLSearchParams(location.search).has('room')) {
+        const def = (S.allClasses || []).find(c => c.rid === DEFAULT_CTRL_ROOM);
+        if (def) { location.replace(location.pathname + '?room=' + encodeURIComponent(def.rid)); return; }
       }
+      render(); maybeShowPickModal();
+      // 无 room 尾缀 = 示例班（后端房间 '1' 固定展示首班），不需要再跳转 rid 链接
     }
   };
 }
@@ -223,7 +241,7 @@ function showLock() {
 }
 function hideLock() { $('lockOverlay').style.display = 'none'; $('lockMsg').textContent = ''; }
 async function doUnlock(pass) {
-  if (!pass) { $('lockMsg').textContent = '请输入密码'; return; }
+  if (!pass) { $('lockMsg').textContent = '请输入班级访问密码'; return; }
   const j = await cmd({ action: 'unlockClass', pass });
   if (j.ok) {
     sessionStorage.setItem('djUnlock:' + lockRid(), pass);
@@ -420,16 +438,16 @@ $('setClassPassBtn').onclick = async () => {
   const cur = (S.allClasses || []).find(c => c.i === S.currentClass);
   let old = '';
   if (cur && cur.locked) {
-    old = prompt(`「${S.className}」已加密，请输入原密码：`, '') || '';
+    old = prompt(`「${S.className}」已加密，请输入原班级访问密码：`, '') || '';
   }
-  const pass = prompt('设置新密码（留空 = 移除密码，最长 20 位）：', '');
+  const pass = prompt('设置「班级访问密码」（留空 = 移除密码，最长 20 位；与云端访问密码无关）：', '');
   if (pass === null) return;
   await cmd({ action: 'setClassPass', old, pass: pass.trim() });
 };
 $('clearClassPassBtn').onclick = async () => {
   const cur = (S.allClasses || []).find(c => c.i === S.currentClass);
   if (!cur || !cur.locked) { toast('当前班级未加密'); return; }
-  const old = prompt('输入当前密码以移除加密：', '') || '';
+  const old = prompt('输入当前班级访问密码以移除加密：', '') || '';
   await cmd({ action: 'setClassPass', old, pass: '' });
 };
 
@@ -441,7 +459,7 @@ $('classSel').onchange = async e => {
   if (!target) { render(); return; }
   if (target.rid === ROOM) { render(); return; }   // 已经是这个班
   if (target.locked) {
-    const pass = prompt(`班级「${target.name}」已加密，请输入密码：`, '') || '';
+    const pass = prompt(`班级「${target.name}」已加密，请输入班级访问密码：`, '') || '';
     if (!pass) { render(); return; }
     const j = await cmd({ action: 'classSwitch', index: i, pass });
     if (!j.ok) { render(); return; }
@@ -452,7 +470,7 @@ $('classSel').onchange = async e => {
 $('addClassBtn').onclick = () => {
   const name = prompt('新建班级名称（留空自动命名）：', '');
   if (name === null) return;
-  const pass = prompt('可选：为该班级设置访问密码（留空 = 不加密；删除该班时也需要此密码）：', '');
+  const pass = prompt('可选：为该班级设置「班级访问密码」（留空 = 不加密；删除该班时也需要此密码）：', '');
   if (pass === null) return;
   cmd({ action: 'addClass', name: name.trim(), pass: pass.trim() });
 };
@@ -462,7 +480,7 @@ $('delClassBtn').onclick = async () => {
   let pass = '';
   const curInfo = (S.allClasses || []).find(c => c.i === S.currentClass);
   if (curInfo && curInfo.locked) {
-    pass = prompt(`班级「${cur}」已加密，删除需要输入密码：`, '') || '';
+    pass = prompt(`班级「${cur}」已加密，删除需要输入班级访问密码：`, '') || '';
   }
   await cmd({ action: 'delClass', index: S.currentClass, confirm: true, pass });
   // 删除后离开当前（已失效的）班级房间，回首页自动进剩余班级

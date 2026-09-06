@@ -1,0 +1,10 @@
+<view class="lock-mask" wx:if="{{show}}" catchtap="noop" catchtouchmove="noop">
+  <view class="lock-card">
+    <view class="lock-title">🔒 {{name || '本班'}} 已加密</view>
+    <view class="lock-tip">该班老师设置了「班级访问密码」；<text class="hl">这不是云端访问密码</text>。</view>
+    <input class="lock-input" password placeholder="输入班级访问密码" value="{{pass}}" bindinput="onPass" disabled="{{busy}}" confirm-type="done" bindconfirm="doUnlock" />
+    <button class="lock-btn {{busy ? 'lock-busy' : ''}}" disabled="{{busy}}" bindtap="doUnlock">{{busy ? '解锁中…' : '🔓 解锁'}}</button>
+    <view class="lock-switch" hover-class="lock-hover" bindtap="goSwitch">切换其他班级 ›</view>
+    <view class="lock-msg" wx:if="{{msg}}">{{msg}}</view>
+  </view>
+</view>

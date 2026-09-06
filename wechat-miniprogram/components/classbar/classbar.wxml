@@ -1,0 +1,17 @@
+<view class="cb">
+  <view class="cb-row1">
+    <scroll-view scroll-x class="cb-scroll" enhanced show-scrollbar="{{false}}">
+      <view class="cb-chip {{item.i === curIdx ? 'on' : ''}} {{item.locked ? 'lk' : ''}}"
+        wx:for="{{classes}}" wx:key="i" data-i="{{item.i}}" bindtap="onTap">
+        {{item.name}}{{item.locked ? '·锁' : ''}}
+      </view>
+    </scroll-view>
+  </view>
+  <view class="cb-row2">
+    <view class="cb-mgr" hover-class="cb-hover" bindtap="onAdd">➕ 新建</view>
+    <view class="cb-mgr" hover-class="cb-hover" bindtap="onRename">✏️ 改名</view>
+    <view class="cb-mgr cb-mgr-del" hover-class="cb-hover" bindtap="onDel">🗑 删除</view>
+    <view class="spacer"></view>
+    <view class="cb-gear" bindtap="goConnect" hover-class="cb-hover">⚙ 连接</view>
+  </view>
+</view>

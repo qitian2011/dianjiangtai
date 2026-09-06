@@ -1,0 +1,4 @@
+{
+  "navigationBarTitleText": "设置",
+  "usingComponents": { "classbar": "/components/classbar/classbar", "lockoverlay": "/components/lockoverlay/lockoverlay" }
+}

@@ -10,11 +10,15 @@ const os = require('os');
 const crypto = require('crypto');
 
 const PORT = process.env.PORT || 8080;
-// 访问密码（P1-4 修复）：非空时 /events 与 /api/* 需带 pin 参数或 x-pin 请求头。
-// 前端首次访问会弹一次输入框，localStorage 记忆免重复。默认 246810；
-// 关闭方法：启动前 `set DJT_PIN=` 再运行（不推荐，局域网名单会被同学扫到）。
-const PIN = process.env.DJT_PIN !== undefined ? process.env.DJT_PIN : '246810';
+// 访问密码（P1-4 + 发布包去明文化 2026-09-04）：/events 与 /api/* 需带 pin 参数或 x-pin 请求头。
+// 密码来源（源码/发布包不含任何明文密码）：① 环境变量 DJT_PIN；② 同目录 .djt_pin 文件（双击 启动.bat 引导创建，不入包）。
+// 未配置 = 服务端未设密码：/api 与 /events 一律 503 拒绝（fail-closed，防局域网名单裸奔）；显式 DJT_PIN= 空串 = 关闭鉴权（仅本机调试）。
 const ROOT = __dirname;
+function loadPin() {
+  if (process.env.DJT_PIN !== undefined) return process.env.DJT_PIN;
+  try { const v = fs.readFileSync(path.join(ROOT, '.djt_pin'), 'utf8').trim(); return v || undefined; } catch (e) { return undefined; }
+}
+const PIN = loadPin();
 const PUBLIC = path.join(ROOT, 'public');
 const ROSTER_FILE = path.join(ROOT, 'roster.json');
 
@@ -213,8 +217,10 @@ function getRoom(id) {
     const idx = roster.classes.findIndex(c => c.rid === id);
     const p = (idx >= 0 && roster.classes[idx].prefs) || {};
     rooms.set(id, {
-      // room 是班级 rid 时绑定该班级；否则沿用全局当前班（与重启前行为一致）
-      currentClass: idx >= 0 ? idx : Math.min(roster.currentClass || 0, roster.classes.length - 1),
+      // room 是班级 rid 时绑定该班级；房间 '1'（无 room 尾缀的 URL）固定展示 classes[0]（示例班/首班），
+      // 不跟随全局 currentClass —— 否则上次切到加密班后，无参 URL 一打开就弹「班级密码锁」；
+      // 仅老式自定义房间（非 '1' 非 rid）沿用全局当前班
+      currentClass: idx >= 0 ? idx : (id === '1' ? 0 : Math.min(roster.currentClass || 0, roster.classes.length - 1)),
       pickedThisRound: [],   // 本轮已点名单（不复读机用）
       lastPick: null,        // {names:[...], at}
       answering: null,       // {name, deadline, duration}
@@ -606,7 +612,10 @@ function handleCmd(body, res, roomId, sid = '') {
         if (!checkClassPass(target, target.rid, body.pass)) { ok = false; msg = '需要班级密码'; markFail(session); break; }
         markOk(session);
       }
-      session.currentClass = i; roster.currentClass = i;
+      // '1' 房（无参 URL = 固定示例班）与 rid 绑定房：展示班由 URL 决定，切班仅解锁并跳转；
+      // 仅老式自定义浮动房间原地切班（session.currentClass 才会被展示逻辑用到）
+      if (roomId !== '1' && !roster.classes.some(c => c.rid === roomId)) session.currentClass = i;
+      roster.currentClass = i;
       if (hasPass(target)) session.unlocked[sid + ':' + target.rid] = true;
       saveRoster(); session.pickedThisRound = []; session.lastPick = null; session.answering = null;
       bumpGen(session);   // P0-3
@@ -624,7 +633,8 @@ function handleCmd(body, res, roomId, sid = '') {
       const pass = sanitize(String(body.pass || '')).slice(0, 20);
       const rid = genRid(name, roster.classes.length);
       roster.classes.push({ name, rid, groups: [], students: [], absent: { date: '', names: [] }, passHash: pass ? sha256hex(PASS_SALT + rid + '::' + pass) : undefined });
-      roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
+      roster.currentClass = roster.classes.length - 1;
+      if (roomId !== '1' && !roster.classes.some(c => c.rid === roomId)) session.currentClass = roster.currentClass;
       if (pass) session.unlocked[sid + ':' + roster.classes[roster.currentClass].rid] = true;
       session.pickedThisRound = []; session.lastPick = null; session.answering = null; session.page = null;
       bumpGen(session);   // P0-3
@@ -676,7 +686,8 @@ function handleCmd(body, res, roomId, sid = '') {
       const name = sanitize(String(body.className || '')).slice(0, 20) || `导入班${roster.classes.length + 1}`;
       const groups = [...new Set(students.map(s => s.group).filter(Boolean))];
       roster.classes.push({ name, rid: genRid(name, roster.classes.length), groups, students });
-      roster.currentClass = roster.classes.length - 1; session.currentClass = roster.currentClass;
+      roster.currentClass = roster.classes.length - 1;
+      if (roomId !== '1' && !roster.classes.some(c => c.rid === roomId)) session.currentClass = roster.currentClass;
       session.pickedThisRound = []; session.lastPick = null; session.answering = null;
       saveRoster();
       msg = `已导入「${name}」${students.length} 人`;
@@ -857,11 +868,18 @@ function readBody(req) {
     req.on('error', () => resolve({ _413: true }));
   });
 }
-// PIN 访问校验（P1-4）：非空 PIN 时 /events 与 /api/* 需带 pin 参数或 x-pin 请求头
+// PIN 访问校验（P1-4/去明文）：返回 'ok' 放行 / 'bad' 密码不符(401) / 'unset' 服务端未配置(503，fail-closed)
 function pinOK(url, req) {
-  if (!PIN) return true;
+  if (PIN === undefined) return 'unset';
+  if (PIN === '') return 'ok';
   const p = url.searchParams.get('pin') || req.headers['x-pin'] || '';
-  return p === String(PIN);
+  return p === String(PIN) ? 'ok' : 'bad';
+}
+function denyPin(res, st, asJson) {
+  const code = st === 'unset' ? 503 : 401;
+  const msg = st === 'unset' ? '服务端未配置访问密码（DJT_PIN 或 .djt_pin），已拒绝访问以防名单裸奔' : '需要访问密码';
+  if (asJson) { res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, msg })); }
+  res.writeHead(code, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end(msg);
 }
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -870,7 +888,8 @@ const server = http.createServer(async (req, res) => {
   if (roomId !== '1' && !(roster.classes.some(c => c.rid === roomId))) roomId = '1';
   const sid = String(url.searchParams.get('sid') || '');   // 浏览器标签页会话 id：解锁态按标签页隔离
   if (url.pathname === '/events') {
-    if (!pinOK(url, req)) { res.writeHead(401); return res.end('需要访问密码'); }
+    const _ps = pinOK(url, req);
+    if (_ps !== 'ok') { denyPin(res, _ps, false); return; }
     res.writeHead(200, { 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
     res.write(`data: ${JSON.stringify({ event: 'state', state: snapshot(roomId, sid) })}\n\n`);
     const client = { res, room: roomId, sid };
@@ -879,13 +898,15 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (url.pathname === '/api/cmd' && req.method === 'POST') {
-    if (!pinOK(url, req)) { res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, msg: '需要访问密码' })); }
+    const _ps = pinOK(url, req);
+    if (_ps !== 'ok') { denyPin(res, _ps, true); return; }
     const body = await readBody(req);
     if (body && body._413) { res.writeHead(413, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, msg: '请求体过大' })); }
     return handleCmd(body, res, roomId, sid);
   }
   if (url.pathname === '/api/state') {
-    if (!pinOK(url, req)) { res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' }); return res.end(JSON.stringify({ ok: false, msg: '需要访问密码' })); }
+    const _ps = pinOK(url, req);
+    if (_ps !== 'ok') { denyPin(res, _ps, true); return; }
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     return res.end(JSON.stringify(snapshot(roomId, sid)));
   }
@@ -921,6 +942,13 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`  大屏页(本机): http://localhost:${PORT}/screen.html`);
   console.log('  教师端候选地址（手机连哪个网就用哪个，含USB网络共享/热点）:');
   for (const ip of lanIPs()) console.log(`    http://${ip}:${PORT}/ctrl.html`);
+  if (PIN === undefined) {
+    console.log('  ⚠️  未设置访问密码！已锁定 /api 与 /events（防名单裸奔）。');
+    console.log('      请先运行 启动.bat 并输入密码（将保存到 .djt_pin），');
+    console.log('      或手动：set DJT_PIN=你的密码 后重新启动。');
+  } else {
+    console.log(`  访问密码: ${PIN === '' ? '(已显式关闭鉴权，仅限本机调试!)' : '已启用（DJT_PIN / .djt_pin）'}`);
+  }
   console.log('==============================================');
 });
 // 按课表自动考试模式：每 20 秒轮询一次。pushState 内部只推送"有活跃大屏/控制端连接"的房间，

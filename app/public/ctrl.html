@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>课堂互动 · 教师控制端</title>
-<link rel="stylesheet" href="style.css?v=36">
-<script src="theme.js?v=36"></script>
+<link rel="stylesheet" href="style.css?v=37">
+<script src="theme.js?v=37"></script>
 </head>
 <body>
 <div class="ctrl-wrap">
@@ -309,7 +309,8 @@
 <div class="modal-overlay" id="lockOverlay" style="display:none">
   <div class="modal-card">
     <div class="modal-label">🔒 <span id="lockClassName"></span> 已加密</div>
-    <input type="text" id="lockPass" placeholder="输入班级密码" style="width:100%; margin:12px 0; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); font-size:16px">
+    <div style="font-size:12px; color:#999; margin:2px 0 0">本班老师设置了「班级访问密码」；这不是云端访问密码</div>
+    <input type="text" id="lockPass" placeholder="输入班级访问密码" style="width:100%; margin:12px 0; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--fg); font-size:16px">
     <div class="modal-actions">
       <button class="btn primary big" id="lockBtn">🔓 解锁</button>
       <button class="btn" id="lockSwitchBtn">切换其他班级</button>
@@ -318,6 +319,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=36"></script>
+<script src="ctrl.js?v=37"></script>
 </body>
 </html>

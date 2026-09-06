@@ -10,3 +10,7 @@ node_modules/
 
 # Cloudflare 本地部署缓存
 app/.wrangler/
+
+# 微信小程序-控制端：微信开发者工具个人配置（因人而异，不入库）
+wechat-miniprogram/project.private.config.json
+wechat-miniprogram/.DS_Store

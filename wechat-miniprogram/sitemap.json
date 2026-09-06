@@ -1,0 +1,6 @@
+{
+  "desc": "点将台控制端小程序",
+  "rules": [
+    { "action": "allow", "page": "*" }
+  ]
+}
