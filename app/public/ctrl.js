@@ -479,6 +479,7 @@ $('delClassBtn').onclick = async () => {
   if (!confirm(`确定删除班级「${cur}」？\n该班级的名单、分组、统计将一并删除，且不可恢复！`)) return;
   let pass = '';
   const curInfo = (S.allClasses || []).find(c => c.i === S.currentClass);
+  if (curInfo && curInfo.rid === DEFAULT_CTRL_ROOM) { toast('「示例」为默认班级，不可删除'); return; }
   if (curInfo && curInfo.locked) {
     pass = prompt(`班级「${cur}」已加密，删除需要输入班级访问密码：`, '') || '';
   }

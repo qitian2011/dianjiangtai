@@ -792,6 +792,9 @@ export class Room {
         if (body.confirm !== true) { ok = false; msg = '未确认删除'; break; }
         const i = (body.index !== undefined) ? (body.index | 0) : roster.currentClass;
         if (!roster.classes[i]) { ok = false; msg = '班级不存在'; break; }
+        // 默认班级保护：示例班是「无参数打开自动进入」的默认班(ctrl.js DEFAULT_CTRL_ROOM)，
+        // 删除会破坏自动进入/首班展示逻辑，服务端一律拒绝（前端拦截只是体验，这里兜底全端）
+        if (roster.classes[i].rid === 'ct3z3h2') { ok = false; msg = '「示例」为默认班级，不可删除（无参打开自动进入依赖它）'; break; }
         if (hasPass(roster.classes[i])) {
           const g3 = lockGuard(session); if (g3) { ok = false; msg = g3; break; }
           if (!(await checkClassPass(roster.classes[i], roster.classes[i].rid, body.pass))) { ok = false; msg = '需要班级密码'; markFail(session); break; }
