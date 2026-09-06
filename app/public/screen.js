@@ -110,36 +110,17 @@ function speak(text) {
 }
 function voiceModeAllowsAI() { return S && (S.voiceMode === 'ai' || S.voiceMode === 'both'); }
 
-/* ---------- SSE（携带访问密码，?room=X 指定班级；无 room 默认打开示例班） ---------- */
+/* ---------- SSE（?room=X 指定班级；无 room 默认打开示例班） ---------- */
 let es = null;
 const ROOM = new URLSearchParams(location.search).get('room') || '1';
 // 标签页会话 id：解锁态按标签页隔离（sessionStorage 关标签即清）——新开页面/新设备打开加密班级 URL 必弹密码框
 const SID = (() => { let s = sessionStorage.getItem('djSid'); if (!s) { s = 's' + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('djSid', s); } return s; })();
 async function initSSE() {
   initSSE._gotState = false;   // v2.0.3: 每次重连重置，避免上一次的成功残留导致超时提示失效
-  let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
-  // 云端访问密码校验（最多重输 3 次，取消即中止不再打扰）：通过才连 SSE。
-  // 注意「云端访问密码」是部署者设置的全局口令，与本班老师设置的「班级密码」是两个不同的密码。
-  let authed = false;
-  for (let i = 0; i < 3 && !authed; i++) {
-    const r0 = await fetch(`/api/state?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`).catch(() => null);
-    if (r0 && r0.status === 404) { location.replace(location.pathname); return; }   // 房间失效：回首页自愈
-    if (!r0 || r0.status !== 401) { authed = true; break; }                          // 通过（或无服务器）
-    const p = _prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
-    if (p === null) {
-      const el = $('connError'); if (el) el.style.display = '';
-      const tip = $('connErrTip'); if (tip) tip.textContent = '未输入云端访问密码，已停止连接';
-      return;
-    }
-    pin = p; localStorage.setItem('djPin', p);
-  }
-  if (!authed) {
-    const el = $('connError'); if (el) el.style.display = '';
-    const tip = $('connErrTip'); if (tip) tip.textContent = '云端访问密码不正确：请联系部署者获取（不是班级密码）';
-    return;
-  }
-  es = new EventSource(`/events?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`);
-  // 6 秒内没收到任何状态 → 显示连接失败提示（网址错/被墙/密码错/断网）
+  const r0 = await fetch(`/api/state?room=${ROOM}&sid=${SID}`).catch(() => null);
+  if (r0 && r0.status === 404) { location.replace(location.pathname); return; }   // 房间失效：回首页自愈
+  es = new EventSource(`/events?room=${ROOM}&sid=${SID}`);
+  // 6 秒内没收到任何状态 → 显示连接失败提示（网址错/被墙/断网）
   setTimeout(() => { if (!initSSE._gotState) { const el = $('connError'); if (el) el.style.display = ''; } }, 6000);
   es.onmessage = (e) => {
     initSSE._gotState = true;
@@ -160,7 +141,7 @@ async function initSSE() {
       if (msg.page) { S = S || {}; showPage(msg.page); }
     }
   };
-  // v2.0.3: SSE 连续失败(断网/云端改 PIN)累计 5 次 → 关闭并重走鉴权流程（本地 PIN 有效自动连上，失效则重新弹输入框），不再死等自动重连
+  // v2.0.3: SSE 连续失败(长时间断网)累计 5 次 → 主动关闭重连，不再死等自动重连
   let esErr = 0;
   es.onopen = () => { esErr = 0; const el = $('connError'); if (el && el.style.display !== 'none') el.style.display = 'none'; };
   es.onerror = () => {
@@ -203,17 +184,8 @@ function showMsg(t) {
   el.textContent = t; el.style.display = 'block';
   clearTimeout(showMsg._t); showMsg._t = setTimeout(() => el.style.display = 'none', 2400);
 }
-async function apiCmd(body, _again) {
-  let pin = localStorage.getItem('djPin') || new URLSearchParams(location.search).get('pin') || '';
-  const r = await fetch(`/api/cmd?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (r.status === 401) {
-    // 云端访问密码 ≠ 班级密码：前者是部署者设置的全局口令
-    const p = _prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
-    if (p === null) return { ok: false };
-    localStorage.setItem('djPin', p);
-    if (_again) { showMsg('云端访问密码不正确，请核对后重试'); return { ok: false }; }
-    return apiCmd(body, true);
-  }
+async function apiCmd(body) {
+  const r = await fetch(`/api/cmd?room=${ROOM}&sid=${SID}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   return r.json().catch(() => ({}));
 }
 function renderClassList() {
