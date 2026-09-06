@@ -141,6 +141,7 @@ async function initSSE() {
     const msg = JSON.parse(e.data);
     if (msg.event === 'state') {
       S = msg.state; render();
+      if (window._pickerOpen) renderClassList();   // v2.0.2: S 更新时若班级选择器已展开则自动同步列表
       // 无 room 尾缀 = 示例班（后端房间 '1' 固定展示首班），不需要再跳转 rid 链接
     }
     else if (msg.event === 'rollStart') startRoll(msg);
@@ -198,14 +199,24 @@ async function apiCmd(body, _again) {
   }
   return r.json().catch(() => ({}));
 }
-function toggleClassPicker(show) {
-  $('classOverlay').style.display = show ? '' : 'none';
-  if (show && S) {
-    $('classList').innerHTML = (S.allClasses || []).map(c => {
-      const cur = c.rid === ROOM;   // 当前班级 = URL 里的班级rid
-      return `<button class="cc-item${cur ? ' cur' : ''}" data-i="${c.i}">${c.locked ? '🔒 ' : ''}${esc(c.name)}${cur ? '（当前）' : ''}</button>`;
-    }).join('');
+function renderClassList() {
+  const wrap = $('classList'); if (!wrap) return;
+  const list = (S && S.allClasses) || [];
+  if (!list.length) {
+    wrap.innerHTML = '<div class="cc-empty">暂无可选班级（或正在加载）</div>';
+    return;
   }
+  // 用 DOM 而非 innerHTML，避免未来字段插值引发 XSS；事件仍走 classOverlay 委托
+  wrap.innerHTML = list.map(c => {
+    const cur = c.rid === ROOM;
+    return `<button class="cc-item${cur ? ' cur' : ''}" data-i="${c.i}" data-rid="${esc(c.rid||'')}">${c.locked ? '🔒 ' : ''}${esc(c.name||'未命名')}${cur ? ' （当前）' : ''}</button>`;
+  }).join('');
+}
+function toggleClassPicker(show) {
+  const ov = $('classOverlay'); if (!ov) return;
+  ov.style.display = show ? '' : 'none';
+  window._pickerOpen = !!show;
+  if (show) renderClassList();
 }
 $('className').onclick = () => toggleClassPicker(true);
 $('classClose').onclick = () => toggleClassPicker(false);
