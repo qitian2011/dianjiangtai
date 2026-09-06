@@ -17,17 +17,8 @@ const ROOM = new URLSearchParams(location.search).get('room') || '1';
 const DEFAULT_CTRL_ROOM = 'ct3z3h2';
 // 标签页会话 id：解锁态按标签页隔离（sessionStorage 关标签即清）——新开页面/新设备打开加密班级 URL 必弹密码框
 const SID = (() => { let s = sessionStorage.getItem('djSid'); if (!s) { s = 's' + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('djSid', s); } return s; })();
-async function cmd(body, _again) {
-  const pin = localStorage.getItem('djPin') || '';
-  const r = await fetch(`/api/cmd?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (r.status === 401) {
-    // 云端访问密码 ≠ 班级密码：后者在本班「设置」页配置，前者是部署者设的全局口令
-    const p = _prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
-    if (p === null) return { ok: false };
-    localStorage.setItem('djPin', p);
-    if (_again) { toast('云端访问密码不正确，请核对后重试'); return { ok: false }; }
-    return cmd(body, true);
-  }
+async function cmd(body) {
+  const r = await fetch(`/api/cmd?room=${ROOM}&sid=${SID}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json();
   if (j.msg) toast(j.msg);
   return j;
@@ -35,40 +26,22 @@ async function cmd(body, _again) {
 function toast(t) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => el.style.display = 'none', 2200); }
 function timeStr(ts) { const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 
-/* ---------- SSE（携带访问密码，?room=X 指定班级；无 room 默认打开示例班） ---------- */
+/* ---------- SSE（?room=X 指定班级；无 room 默认打开示例班） ---------- */
 let es = null;
 async function initSSE() {
   initSSE._gotState = false;   // v2.0.3: 每次重连重置，避免上一次的成功残留导致超时提示失效
-  let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
-  // 云端访问密码校验（最多重输 3 次，取消即中止不再打扰）：通过才连 SSE。
-  // 注意「云端访问密码」是部署者设置的全局口令，与本班老师设置的「班级密码」是两个不同的密码。
-  let authed = false;
-  for (let i = 0; i < 3 && !authed; i++) {
-    const r0 = await fetch(`/api/state?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`).catch(() => null);
-    if (r0 && r0.status === 404) { location.replace(location.pathname); return; }   // 房间失效：回首页自愈
-    if (!r0 || r0.status !== 401) { authed = true; break; }                          // 通过（或无服务器）
-    const p = _prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
-    if (p === null) {
-      $('connBadge').textContent = '● 未连接（未输入云端访问密码）'; $('connBadge').style.background = '#7a1d1d';
-      return;
-    }
-    pin = p; localStorage.setItem('djPin', p);
-  }
-  if (!authed) {
-    $('connBadge').textContent = '● 云端访问密码错误'; $('connBadge').style.background = '#7a1d1d';
-    toast('云端访问密码不正确：请联系部署者获取（该密码不是班级密码）');
-    return;
-  }
-  es = new EventSource(`/events?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`);
-  // 8 秒内没收到状态 → 提示（网址错/被墙/密码错/断网）
+  const r0 = await fetch(`/api/state?room=${ROOM}&sid=${SID}`).catch(() => null);
+  if (r0 && r0.status === 404) { location.replace(location.pathname); return; }   // 房间失效：回首页自愈
+  es = new EventSource(`/events?room=${ROOM}&sid=${SID}`);
+  // 8 秒内没收到状态 → 提示（网址错/被墙/断网）
   setTimeout(() => {
     if (!initSSE._gotState) {
       $('connBadge').textContent = '● 连接失败'; $('connBadge').style.background = '#7a1d1d';
-      toast('无法连接服务器：请检查网址(qitian.dpdns.org)/密码/网络');
+      toast('无法连接服务器：请检查网址(qitian.dpdns.org)与网络');
     }
   }, 8000);
-  // v2.0.3: SSE 连续失败不再无限「重连中」——累计 5 次(约 15-30s)判定疑似鉴权失效/长时间断网，
-  // 主动关闭并重走鉴权流程：本地 PIN 若仍有效(网络恢复)自动连上；云端改过 PIN 则重新弹输入框。
+  // v2.0.3: SSE 连续失败不再无限「重连中」——累计 5 次(约 15-30s)判定长时间断网，
+  // 主动关闭重连（云端改过地址/断网恢复后自动连上）。
   let esErr = 0;
   es.onopen = () => { esErr = 0; $('connBadge').textContent = '● 已连接'; $('connBadge').style.background = '#1d4d33'; };
   es.onerror = () => {
@@ -458,7 +431,7 @@ $('setClassPassBtn').onclick = async () => {
   if (cur && cur.locked) {
     old = _prompt(`「${S.className}」已加密，请输入原班级访问密码：`, '') || '';
   }
-  const pass = _prompt('设置「班级访问密码」（留空 = 移除密码，最长 20 位；与云端访问密码无关）：', '');
+  const pass = _prompt('设置「班级访问密码」（留空 = 移除密码，最长 20 位）：', '');
   if (pass === null) return;
   await cmd({ action: 'setClassPass', old, pass: pass.trim() });
 };
