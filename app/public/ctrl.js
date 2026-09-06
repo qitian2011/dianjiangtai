@@ -3,6 +3,11 @@ let S = null;
 let selGroup = null, selCount = 1, selTimer = 60;
 let pageSel = [], selPlace = null;   // pageSel: [{n:姓名, s:学号}]，以学号定位防同名
 let lockRoll = false;
+/* ==== v2.0.2 桌面端兼容：Electron 默认禁用 window.prompt/confirm/alert，优先用 djt.* 桥（main.js 注册的 sync IPC），浏览器 fallback 到原生 ==== */
+const _djt=window.djt||{};
+const _prompt=(_djt.prompt||window.prompt).bind(_djt.prompt||window);
+const _confirm=(_djt.confirm||window.confirm).bind(_djt.confirm||window);
+const _alert=(_djt.alert||window.alert).bind(_djt.alert||window);
 const $ = id => document.getElementById(id);
 
 /* ---------- 工具 ---------- */
@@ -17,7 +22,7 @@ async function cmd(body, _again) {
   const r = await fetch(`/api/cmd?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (r.status === 401) {
     // 云端访问密码 ≠ 班级密码：后者在本班「设置」页配置，前者是部署者设的全局口令
-    const p = prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
+    const p = _prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
     if (p === null) return { ok: false };
     localStorage.setItem('djPin', p);
     if (_again) { toast('云端访问密码不正确，请核对后重试'); return { ok: false }; }
@@ -33,6 +38,7 @@ function timeStr(ts) { const d = new Date(ts); return `${String(d.getHours()).pa
 /* ---------- SSE（携带访问密码，?room=X 指定班级；无 room 默认打开示例班） ---------- */
 let es = null;
 async function initSSE() {
+  initSSE._gotState = false;   // v2.0.3: 每次重连重置，避免上一次的成功残留导致超时提示失效
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
   // 云端访问密码校验（最多重输 3 次，取消即中止不再打扰）：通过才连 SSE。
   // 注意「云端访问密码」是部署者设置的全局口令，与本班老师设置的「班级密码」是两个不同的密码。
@@ -41,7 +47,7 @@ async function initSSE() {
     const r0 = await fetch(`/api/state?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`).catch(() => null);
     if (r0 && r0.status === 404) { location.replace(location.pathname); return; }   // 房间失效：回首页自愈
     if (!r0 || r0.status !== 401) { authed = true; break; }                          // 通过（或无服务器）
-    const p = prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
+    const p = _prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
     if (p === null) {
       $('connBadge').textContent = '● 未连接（未输入云端访问密码）'; $('connBadge').style.background = '#7a1d1d';
       return;
@@ -61,8 +67,20 @@ async function initSSE() {
       toast('无法连接服务器：请检查网址(qitian.dpdns.org)/密码/网络');
     }
   }, 8000);
-  es.onopen = () => { $('connBadge').textContent = '● 已连接'; $('connBadge').style.background = '#1d4d33'; };
-  es.onerror = () => { $('connBadge').textContent = '● 重连中…'; $('connBadge').style.background = '#6b4a1d'; };
+  // v2.0.3: SSE 连续失败不再无限「重连中」——累计 5 次(约 15-30s)判定疑似鉴权失效/长时间断网，
+  // 主动关闭并重走鉴权流程：本地 PIN 若仍有效(网络恢复)自动连上；云端改过 PIN 则重新弹输入框。
+  let esErr = 0;
+  es.onopen = () => { esErr = 0; $('connBadge').textContent = '● 已连接'; $('connBadge').style.background = '#1d4d33'; };
+  es.onerror = () => {
+    esErr += 1;
+    $('connBadge').textContent = '● 重连中…'; $('connBadge').style.background = '#6b4a1d';
+    if (esErr >= 5) {
+      esErr = 0;
+      try { es.close(); } catch (err) {}
+      es = null;
+      setTimeout(() => { initSSE(); }, 3000);
+    }
+  };
   es.onmessage = e => {
     initSSE._gotState = true;
     const m = JSON.parse(e.data);
@@ -267,7 +285,7 @@ $('rollBtn').onclick = async () => {
 $('resetRoundBtn').onclick = () => cmd({ action: 'resetRound' });
 // 请假名单：编辑模式切换 + 勾选保存 + 清空
 $('absentToggleBtn').onclick = () => { $('absentEdit').style.display = $('absentEdit').style.display === 'none' ? '' : 'none'; };
-$('absentClearBtn').onclick = () => { if (confirm('确定清空今日请假名单？')) cmd({ action: 'clearAbsent' }); };
+$('absentClearBtn').onclick = () => { if (_confirm('确定清空今日请假名单？')) cmd({ action: 'clearAbsent' }); };
 $('absentEdit').addEventListener('click', async e => {
   if (!e.target.dataset.a) return;
   const name = e.target.dataset.a;
@@ -396,10 +414,10 @@ $('ttAmMinus').onclick = () => cmd({ action: 'ttConfig', am: Math.max(1, (S.tt ?
 $('ttAmPlus').onclick = () => cmd({ action: 'ttConfig', am: Math.min(8, (S.tt ? S.tt.am : 4) + 1), pm: S.tt ? S.tt.pm : 3 });
 $('ttPmMinus').onclick = () => cmd({ action: 'ttConfig', am: S.tt ? S.tt.am : 4, pm: Math.max(1, (S.tt ? S.tt.pm : 3) - 1) });
 $('ttPmPlus').onclick = () => cmd({ action: 'ttConfig', am: S.tt ? S.tt.am : 4, pm: Math.min(8, (S.tt ? S.tt.pm : 3) + 1) });
-$('ttClearBtn').onclick = () => { if (confirm('确定清空本班整周课表？')) cmd({ action: 'ttClear' }); };
+$('ttClearBtn').onclick = () => { if (_confirm('确定清空本班整周课表？')) cmd({ action: 'ttClear' }); };
 $('ttPreChk').addEventListener('change', e => cmd({ action: 'ttExtra', pre: e.target.checked ? 1 : 0 }));
 $('ttPostChk').addEventListener('change', e => cmd({ action: 'ttExtra', post: e.target.checked ? 1 : 0 }));
-$('ttStatsClearBtn').onclick = () => { if (confirm('确定清空本班今日答题统计？')) cmd({ action: 'ttStatsClear' }); };
+$('ttStatsClearBtn').onclick = () => { if (_confirm('确定清空本班今日答题统计？')) cmd({ action: 'ttStatsClear' }); };
 $('ttGrid').addEventListener('change', e => {
   if (e.target.dataset.d === undefined) return;
   cmd({ action: 'ttCell', day: +e.target.dataset.d, slot: e.target.dataset.s, course: e.target.value.trim() });
@@ -421,7 +439,7 @@ $('showTtChk').onchange = () => cmd({ action: 'setShowTt', on: $('showTtChk').ch
 $('showMemosChk').onchange = () => cmd({ action: 'setShowMemos', on: $('showMemosChk').checked });
 /* 公告栏：发布/清除（按班级保存，大屏待机页常驻） */
 $('noticeSaveBtn').onclick = () => cmd({ action: 'setNotice', text: $('noticeText').value.trim() });
-$('noticeClearBtn').onclick = () => { if (confirm('确定清除当前公告？')) cmd({ action: 'setNotice', text: '' }); };
+$('noticeClearBtn').onclick = () => { if (_confirm('确定清除当前公告？')) cmd({ action: 'setNotice', text: '' }); };
 /* 备忘录：添加 / 勾选完成 / 删除 / 清除已完成（按班级保存） */
 $('memoAddBtn').onclick = () => {
   const v = $('memoInput').value.trim();
@@ -438,16 +456,16 @@ $('setClassPassBtn').onclick = async () => {
   const cur = (S.allClasses || []).find(c => c.i === S.currentClass);
   let old = '';
   if (cur && cur.locked) {
-    old = prompt(`「${S.className}」已加密，请输入原班级访问密码：`, '') || '';
+    old = _prompt(`「${S.className}」已加密，请输入原班级访问密码：`, '') || '';
   }
-  const pass = prompt('设置「班级访问密码」（留空 = 移除密码，最长 20 位；与云端访问密码无关）：', '');
+  const pass = _prompt('设置「班级访问密码」（留空 = 移除密码，最长 20 位；与云端访问密码无关）：', '');
   if (pass === null) return;
   await cmd({ action: 'setClassPass', old, pass: pass.trim() });
 };
 $('clearClassPassBtn').onclick = async () => {
   const cur = (S.allClasses || []).find(c => c.i === S.currentClass);
   if (!cur || !cur.locked) { toast('当前班级未加密'); return; }
-  const old = prompt('输入当前班级访问密码以移除加密：', '') || '';
+  const old = _prompt('输入当前班级访问密码以移除加密：', '') || '';
   await cmd({ action: 'setClassPass', old, pass: '' });
 };
 
@@ -459,7 +477,7 @@ $('classSel').onchange = async e => {
   if (!target) { render(); return; }
   if (target.rid === ROOM) { render(); return; }   // 已经是这个班
   if (target.locked) {
-    const pass = prompt(`班级「${target.name}」已加密，请输入班级访问密码：`, '') || '';
+    const pass = _prompt(`班级「${target.name}」已加密，请输入班级访问密码：`, '') || '';
     if (!pass) { render(); return; }
     const j = await cmd({ action: 'classSwitch', index: i, pass });
     if (!j.ok) { render(); return; }
@@ -468,20 +486,20 @@ $('classSel').onchange = async e => {
   location.href = location.pathname + '?room=' + encodeURIComponent(target.rid);
 };
 $('addClassBtn').onclick = () => {
-  const name = prompt('新建班级名称（留空自动命名）：', '');
+  const name = _prompt('新建班级名称（留空自动命名）：', '');
   if (name === null) return;
-  const pass = prompt('可选：为该班级设置「班级访问密码」（留空 = 不加密；删除该班时也需要此密码）：', '');
+  const pass = _prompt('可选：为该班级设置「班级访问密码」（留空 = 不加密；删除该班时也需要此密码）：', '');
   if (pass === null) return;
   cmd({ action: 'addClass', name: name.trim(), pass: pass.trim() });
 };
 $('delClassBtn').onclick = async () => {
   const cur = S ? S.className : '';
-  if (!confirm(`确定删除班级「${cur}」？\n该班级的名单、分组、统计将一并删除，且不可恢复！`)) return;
+  if (!_confirm(`确定删除班级「${cur}」？\n该班级的名单、分组、统计将一并删除，且不可恢复！`)) return;
   let pass = '';
   const curInfo = (S.allClasses || []).find(c => c.i === S.currentClass);
   if (curInfo && curInfo.rid === DEFAULT_CTRL_ROOM) { toast('「示例」为默认班级，不可删除'); return; }
   if (curInfo && curInfo.locked) {
-    pass = prompt(`班级「${cur}」已加密，删除需要输入班级访问密码：`, '') || '';
+    pass = _prompt(`班级「${cur}」已加密，删除需要输入班级访问密码：`, '') || '';
   }
   await cmd({ action: 'delClass', index: S.currentClass, confirm: true, pass });
   // 删除后离开当前（已失效的）班级房间，回首页自动进剩余班级
@@ -489,7 +507,7 @@ $('delClassBtn').onclick = async () => {
 };
 $('renameClassBtn').onclick = () => {
   const cur = S ? S.className : '';
-  const name = prompt('修改班级名称：', cur);
+  const name = _prompt('修改班级名称：', cur);
   if (name && name.trim() && name.trim() !== cur) cmd({ action: 'renameClass', name: name.trim() });
 };
 $('examChk').onchange = e => cmd({ action: 'examMode', on: e.target.checked });
