@@ -5,7 +5,6 @@
  *   （班级实例独立存储/独立配额，全校规模互不影响；数据自动从主实例引导迁移，改动回写主实例镜像）
  * - 名单持久化在 DO storage（免费版 SQLite 存储），重启不丢
  * - 会话状态（本轮已点、答题、传呼）在内存，DO 重启即清（与本地版一致）
- * - PIN 访问控制：wrangler.jsonc vars.PIN，非空时 /events 与 /api/* 都需要密码
  * - 班级密码：班级设置 pass 后，该班 URL 直接打开会锁定（只放行 unlockClass），前端弹密码框
  * 部署：在 app 目录执行 `wrangler deploy`
  */
@@ -1061,7 +1060,7 @@ export class Room {
   }
 }
 
-/* ---------------- Worker 入口：PIN 校验 + 每班独立 DO 路由 ---------------- */
+/* ---------------- Worker 入口：每班独立 DO 路由 ---------------- */
 // 班级 rid 目录缓存（20 秒）：命中 → 路由到该班独立 DO；未命中/失效 → 主实例（老式行为兜底）
 let dirCache = { at: 0, rids: null };
 async function isClassRid(env, roomId) {
@@ -1080,15 +1079,6 @@ export default {
     const url = new URL(req.url);
     if (url.pathname === '/') return Response.redirect(url.origin + '/screen.html', 302);
     if (url.pathname === '/events' || url.pathname.startsWith('/api/')) {
-      if (!env.PIN) {
-        // fail-closed（去明文化 2026-09-04）：PIN 走 `wrangler secret put PIN` / `--var PIN:xxx` 注入，
-        // 未配置一律 503，杜绝忘配导致公网名单/操作裸奔
-        return json({ ok: false, msg: '服务端未配置访问密码（PIN），请联系管理员设置' }, 503);
-      }
-      const pin = url.searchParams.get('pin') || req.headers.get('x-pin') || '';
-      if (pin !== env.PIN) {
-        return json({ ok: false, msg: '需要访问密码' }, 401);
-      }
       const roomId = url.searchParams.get('room') || '1';
       let name = 'main';
       let fwdReq = req;
