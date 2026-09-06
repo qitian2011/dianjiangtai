@@ -3,6 +3,11 @@ let S = null;            // 最新状态快照
 let rollTimer = null;
 let soundCtx = null;
 let volume = 0.3;
+/* ==== v2.0.2 桌面端兼容：Electron 默认禁用 window.prompt/confirm/alert，优先用 djt.* 桥（main.js 注册的 sync IPC），浏览器 fallback 到原生 ==== */
+const _djt=window.djt||{};
+const _prompt=(_djt.prompt||window.prompt).bind(_djt.prompt||window);
+const _confirm=(_djt.confirm||window.confirm).bind(_djt.confirm||window);
+const _alert=(_djt.alert||window.alert).bind(_djt.alert||window);
 const $ = id => document.getElementById(id);
 // HTML 全量转义（P0-2 XSS 修复）：& < > " ' 五项全转，可同时用于文本节点与双引号属性
 function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
@@ -111,6 +116,7 @@ const ROOM = new URLSearchParams(location.search).get('room') || '1';
 // 标签页会话 id：解锁态按标签页隔离（sessionStorage 关标签即清）——新开页面/新设备打开加密班级 URL 必弹密码框
 const SID = (() => { let s = sessionStorage.getItem('djSid'); if (!s) { s = 's' + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('djSid', s); } return s; })();
 async function initSSE() {
+  initSSE._gotState = false;   // v2.0.3: 每次重连重置，避免上一次的成功残留导致超时提示失效
   let pin = new URLSearchParams(location.search).get('pin') || localStorage.getItem('djPin') || '';
   // 云端访问密码校验（最多重输 3 次，取消即中止不再打扰）：通过才连 SSE。
   // 注意「云端访问密码」是部署者设置的全局口令，与本班老师设置的「班级密码」是两个不同的密码。
@@ -119,7 +125,7 @@ async function initSSE() {
     const r0 = await fetch(`/api/state?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`).catch(() => null);
     if (r0 && r0.status === 404) { location.replace(location.pathname); return; }   // 房间失效：回首页自愈
     if (!r0 || r0.status !== 401) { authed = true; break; }                          // 通过（或无服务器）
-    const p = prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
+    const p = _prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
     if (p === null) {
       const el = $('connError'); if (el) el.style.display = '';
       const tip = $('connErrTip'); if (tip) tip.textContent = '未输入云端访问密码，已停止连接';
@@ -154,7 +160,18 @@ async function initSSE() {
       if (msg.page) { S = S || {}; showPage(msg.page); }
     }
   };
-  es.onerror = () => { /* EventSource 自动重连 */ };
+  // v2.0.3: SSE 连续失败(断网/云端改 PIN)累计 5 次 → 关闭并重走鉴权流程（本地 PIN 有效自动连上，失效则重新弹输入框），不再死等自动重连
+  let esErr = 0;
+  es.onopen = () => { esErr = 0; const el = $('connError'); if (el && el.style.display !== 'none') el.style.display = 'none'; };
+  es.onerror = () => {
+    esErr += 1;
+    if (esErr >= 5) {
+      esErr = 0;
+      try { es.close(); } catch (err) {}
+      es = null;
+      setTimeout(() => { initSSE(); }, 3000);
+    }
+  };
 }
 initSSE();
 
@@ -191,7 +208,7 @@ async function apiCmd(body, _again) {
   const r = await fetch(`/api/cmd?room=${ROOM}&sid=${SID}&pin=${encodeURIComponent(pin)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   if (r.status === 401) {
     // 云端访问密码 ≠ 班级密码：前者是部署者设置的全局口令
-    const p = prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
+    const p = _prompt('需要「云端访问密码」（服务器全局口令，不是班级密码）');
     if (p === null) return { ok: false };
     localStorage.setItem('djPin', p);
     if (_again) { showMsg('云端访问密码不正确，请核对后重试'); return { ok: false }; }
@@ -229,7 +246,7 @@ $('classOverlay').addEventListener('click', async e => {
   if (!target || target.rid === ROOM) { toggleClassPicker(false); return; }   // 已是这个班
   // 切班 = 换 URL（班级即房间）：加密班先验证密码
   if (target.locked) {
-    const pass = prompt(`班级「${target.name}」已加密，请输入班级访问密码：`, '') || '';
+    const pass = _prompt(`班级「${target.name}」已加密，请输入班级访问密码：`, '') || '';
     if (!pass) { toggleClassPicker(false); return; }
     const j = await apiCmd({ action: 'classSwitch', index: i, pass });
     if (!j.ok) { toggleClassPicker(false); if (j && j.msg) showMsg(j.msg); return; }
