@@ -114,6 +114,11 @@
     <div class="card">
       <h3>今日传呼记录</h3>
       <ul class="history" id="pageLogList"><li>暂无</li></ul>
+      <div class="row" style="margin-top:10px">
+        <button class="btn small success" id="pageBatchConfirmBtn">✅ 已到所选</button>
+        <button class="btn small danger" id="pageBatchRetractBtn">❌ 撤回所选</button>
+        <span style="font-size:12px; color:var(--dim); margin-left:8px">勾选左侧方框可多选，操作仅对所选记录生效；上方的「当前传呼」只作用于最新一条</span>
+      </div>
     </div>
   </div>
 
@@ -319,6 +324,6 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="ctrl.js?v=42"></script>
+<script src="ctrl.js?v=43"></script>
 </body>
 </html>
