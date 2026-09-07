@@ -2,9 +2,15 @@
 // 协议与点将台现有 H5 控制端完全一致，仅传输层不同（wx.cloud.callFunction 免域名白名单）
 //
 // 房间（room）语义与 H5 的 URL ?room= 一致：
-//   '1'            = 示例班（主实例，恒展示 classes[0]，无 room 尾缀的默认语境）
-//   某班级的 rid   = 该班级独立 DO（点名/名单/课表都是它）
+//   '1'            = 主实例（管理中枢 + 目录源），仅用于拉班级目录，不作为上课工作房
+//   某班级的 rid   = 该班级独立 DO（点名/名单/课表/传呼/广播都在它上面）
 // 小程序同一时刻只在一个房间上下文里工作，切班 = setRoom(rid) 后再请求。
+//
+// ⚠️ 2026-09-06 修复：此前把「目录第 0 个班」硬编码映射到主实例 room '1'（假设它恒为示例班），
+// 但实际首班可能是带独立 DO 的真实班级（如初三（2）班 c31ieon）。主实例 room'1' 与班级 DO
+// 是两个不同 Durable Object：page/lastPick/解锁/SSE 广播等会话态互相隔离——
+// 小程序发在 room'1' 上的点名/传呼，大屏（连班级 DO）永远收不到。故现在一律按 rid 访问班级，
+// room '1' 只在「未选定班级」时作为临时目录语境，由 resolveRoom() 自动落到目录首班的 rid。
 
 const SID_KEY = 'djt_mp_sid';
 const ROOM_KEY = 'djt_mp_room';
@@ -69,10 +75,24 @@ function cmd(action, extra) {
   return call('POST', '/api/cmd', getRoom(), Object.assign({ action }, extra || {}));
 }
 
+// 房间归一：工作房必须是具体班级的 rid 独立 DO（与网页端「切班=换 ?room=rid」一致）。
+// getRoom() 为 '1'（尚未选定班级 / 新装默认 / 删班回退）时，拉一次主实例目录，
+// 自动落到目录首班（classes[0]）的 rid 并记住；目录为空则维持 '1'。
+// 避免点名/传呼落在主实例 room'1' 的班级副本上——副本与班级 DO 会话隔离，接收端收不到。
+async function resolveRoom() {
+  let room = getRoom();
+  if (room === '1') {
+    const d = await call('GET', '/api/state', '1').catch(() => null);
+    const first = (d && d.allClasses && d.allClasses[0]) || null;
+    if (first && first.rid) { room = String(first.rid); setRoom(room); }
+  }
+  return room;
+}
+
 // 带班级目录的完整状态：当前房为 rid（班级实例）时其快照 allClasses 只含本班，
 // 需并行向主实例('1')取全量目录，供顶部班级栏切换使用。
 async function getStateWithDir() {
-  const room = getRoom();
+  const room = await resolveRoom();
   const [s, dir] = await Promise.all([
     call('GET', '/api/state', room),
     room !== '1' ? call('GET', '/api/state', '1').catch(() => null) : Promise.resolve(null)
@@ -83,4 +103,4 @@ async function getStateWithDir() {
   return { s, classes, room };
 }
 
-module.exports = { getSid, getRoom, setRoom, getState, cmd, getStateOf, cmdOf, getStateWithDir };
+module.exports = { getSid, getRoom, setRoom, getState, cmd, getStateOf, cmdOf, getStateWithDir, resolveRoom };
