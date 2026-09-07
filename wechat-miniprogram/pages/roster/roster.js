@@ -85,12 +85,12 @@ Page({
       wx.showModal({ title: '导入成功', content: '班级「' + (name || '未命名班级') + '」已创建。是否切换到该班？', showCancel: true, cancelText: '留在本班', confirmText: '去使用',
         success: res => {
           if (!res.confirm) { this.load(); return; }
-          // 切到新班：新班在目录末尾
+          // 切到新班：新班在目录末尾（一律走 rid 独立 DO）
           this.load().then(() => {
             const s2 = this.data.s;
             if (s2 && s2.allClasses && s2.allClasses.length) {
               const last = s2.allClasses[s2.allClasses.length - 1];
-              const room = last.i === 0 ? '1' : (last.rid || '');
+              const room = last.rid || '';
               if (room) { setRoom(room); wx.switchTab({ url: '/pages/roll/roll' }); }
             }
           });
