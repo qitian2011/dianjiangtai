@@ -1,7 +1,9 @@
 // 连接与班级管理页：打开即自动连接云端（无全局密码门槛，PIN 由 proxy 云函数注入），
 // 仅保留：班级列表切换、带锁班级的「班级访问密码」解锁（班级密码 ≠ 云端密码，班级密码仍保留）。
+// 2026-09-06：班级一律按 rid 独立 DO 访问（去掉「目录首班=主实例 room'1'」旧映射），
+// 与网页端/大屏同实例，点名/传呼/解锁才互通。
 const theme = require('../../utils/theme.js');
-const { getRoom, setRoom, getStateOf, cmdOf } = require('../../utils/djt.js');
+const { getRoom, setRoom, getStateOf, cmdOf, resolveRoom } = require('../../utils/djt.js');
 
 const UNLOCK_PREFIX = 'djUnlock:';
 function unlockKey(rid) { return UNLOCK_PREFIX + rid; }
@@ -29,9 +31,10 @@ Page({
   async bootstrap() {
     if (this._busy) return;
     this._busy = true;
-    const room = getRoom();
     this.setData({ busy: true, stage: 'boot', msg: '', pass: '' });
     try {
+      // 默认房 '1' → 自动落到目录首班的 rid 独立 DO（防在主实例副本上工作而收不到响应）
+      const room = await resolveRoom();
       const [s, dir] = await Promise.all([
         getStateOf(room),
         room !== '1' ? getStateOf('1').catch(() => null) : Promise.resolve(null)
@@ -72,7 +75,8 @@ Page({
     const i = Number(e.currentTarget.dataset.i);
     const c = this.data.classes.find(x => x.i === i);
     if (!c || i === this.data.curIdx) return;
-    const room = i === 0 ? '1' : (c.rid || '');
+    // 班级一律走 rid 独立 DO（含目录首班）：与网页端「切班=换 ?room=rid」同构
+    const room = c.rid || '1';
     if (!room) { wx.showToast({ title: '无法进入该班', icon: 'none' }); return; }
     if (c.locked) {
       // 会话已解锁过 → 自动带密码切过去（Ctrl sessionStorage djUnlock 同语义）
