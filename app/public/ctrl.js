@@ -2,6 +2,7 @@
 let S = null;
 let selGroup = null, selCount = 1, selTimer = 60;
 let pageSel = [], selPlace = null;   // pageSel: [{n:姓名, s:学号}]，以学号定位防同名
+let pageChecked = new Set();         // 2026-09-07：传呼记录多选（已到/撤回仅作用于勾选的记录 id）
 let lockRoll = false;
 /* ==== v2.0.2 桌面端兼容：Electron 默认禁用 window.prompt/confirm/alert，优先用 djt.* 桥（main.js 注册的 sync IPC），浏览器 fallback 到原生 ==== */
 const _djt=window.djt||{};
@@ -25,9 +26,28 @@ async function cmd(body) {
 }
 function toast(t) { const el = $('toast'); el.textContent = t; el.style.display = 'block'; clearTimeout(toast._t); toast._t = setTimeout(() => el.style.display = 'none', 2200); }
 function timeStr(ts) { const d = new Date(ts); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
+// 传呼记录姓名·学号 成对展示（有学号显示学号区分同名）
+function pageNamesTxt(l) { return ((l && l.names) || []).map((n, i) => l.sids && l.sids[i] ? `${n}·${l.sids[i]}` : n).join('、'); }
+// 2026-09-07：记录多选 → 刷新「已到/撤回所选」按钮可用态
+function pageBatchRefresh() {
+  const b1 = $('pageBatchConfirmBtn'), b2 = $('pageBatchRetractBtn');
+  if (!b1 || !b2) return;
+  const log = (S && S.pageLog) || [];
+  const ids = [...pageChecked].filter(id => log.some(l => l.id === id));
+  const cnt = ids.length;
+  b1.textContent = cnt ? `✅ 已到所选(${cnt})` : '✅ 已到所选';
+  b2.textContent = cnt ? `❌ 撤回所选(${cnt})` : '❌ 撤回所选';
+  b1.disabled = !ids.some(id => { const l = log.find(x => x.id === id); return l && !l.retracted && !l.confirmed; });
+  b2.disabled = !ids.some(id => { const l = log.find(x => x.id === id); return l && !l.retracted; });
+}
 
 /* ---------- SSE（?room=X 指定班级；无 room 默认打开示例班） ---------- */
 let es = null;
+let sseLastEvt = Date.now();   // 2026-09-07：最近一次收到服务器数据的时间（心跳 hb/state/事件），看门狗判活依据
+function reopenSSE() {         // 2026-09-07：统一重连入口（onerror 与看门狗共用），防并发重复建连
+  if (reopenSSE._t) return;
+  reopenSSE._t = setTimeout(() => { reopenSSE._t = null; initSSE(); }, 30);
+}
 async function initSSE() {
   initSSE._gotState = false;   // v2.0.3: 每次重连重置，避免上一次的成功残留导致超时提示失效
   const r0 = await fetch(`/api/state?room=${ROOM}&sid=${SID}`).catch(() => null);
@@ -43,7 +63,12 @@ async function initSSE() {
   // v2.0.3: SSE 连续失败不再无限「重连中」——累计 5 次(约 15-30s)判定长时间断网，
   // 主动关闭重连（云端改过地址/断网恢复后自动连上）。
   let esErr = 0;
-  es.onopen = () => { esErr = 0; $('connBadge').textContent = '● 已连接'; $('connBadge').style.background = '#1d4d33'; };
+  es.onopen = () => {
+    esErr = 0;
+    sseLastEvt = Date.now();
+    lockAutoTried = false;   // 2026-09-07：每次(重)连都允许自动试一次历史密码——DO 空闲回收丢失解锁态后可自愈
+    $('connBadge').textContent = '● 已连接'; $('connBadge').style.background = '#1d4d33';
+  };
   es.onerror = () => {
     esErr += 1;
     $('connBadge').textContent = '● 重连中…'; $('connBadge').style.background = '#6b4a1d';
@@ -51,11 +76,12 @@ async function initSSE() {
       esErr = 0;
       try { es.close(); } catch (err) {}
       es = null;
-      setTimeout(() => { initSSE(); }, 3000);
+      reopenSSE();
     }
   };
   es.onmessage = e => {
     initSSE._gotState = true;
+    sseLastEvt = Date.now();   // 2026-09-07：任何数据（含 25s 心跳 hb 事件）都证明连接存活
     const m = JSON.parse(e.data);
     if (m.event === 'state') {
       S = m.state;
@@ -72,6 +98,18 @@ async function initSSE() {
   };
 }
 initSSE();
+// 2026-09-07 看门狗：50s 无任何数据（服务端 25s 心跳漏 1 次以上）→ 判定连接静默失效并强制重连。
+// 覆盖"DO 被空闲回收后不再推数据、但 TCP 未触发 error"等长时间运行失效场景（大屏/控制端收不到消息）
+setInterval(() => {
+  if (!es || es.readyState === EventSource.CLOSED) return;   // 已关：交给 onerror 流程
+  if (Date.now() - sseLastEvt > 50000) {
+    console.warn('[djt] SSE 静默超时(50s 无数据)，强制重连');
+    sseLastEvt = Date.now();
+    try { es.close(); } catch (e) {}
+    es = null;
+    reopenSSE();
+  }
+}, 10000);
 
 /* ---------- Tab 切换 ---------- */
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
@@ -134,16 +172,23 @@ function render() {
   // 去处
   $('placeChips').innerHTML = S.places.map(p => `<span class="chip ${selPlace === p ? 'sel' : ''}" data-p="${esc(p)}">${esc(p)}</span>`).join('');
   $('fromInput').value = localStorage.getItem('teacherName') || $('fromInput').value;
-  // 当前传呼（姓名·学号）
+  // 当前传呼（姓名·学号）——「已到/撤回」仅作用于这一条（2026-09-07）
   const p = S.page;
   $('activePage').style.display = p && !p.retracted && !p.confirmed ? '' : 'none';
   if (p && !p.retracted && !p.confirmed) {
-    const pn = (p.names || []).map((n, i) => p.sids && p.sids[i] ? `${n}·${p.sids[i]}` : n).join('、');
-    $('activePageInfo').textContent = `${pn} → ${p.place}${p.from ? ' · 找' + p.from : ''} · ${timeStr(p.sentAt)}发出`;
+    $('activePageInfo').textContent = `${pageNamesTxt(p)} → ${p.place}${p.from ? ' · 找' + p.from : ''}${p.note ? ' · 留言:' + p.note : ''} · ${timeStr(p.sentAt)}发出`;
   }
-  // 传呼记录
+  // 传呼记录（2026-09-07：可勾选多条，批量「已到/撤回」仅对所选记录生效，不再扩散全部历史）
   $('pageLogList').innerHTML = S.pageLog.length
-    ? S.pageLog.slice().reverse().map(l => `<li><b>${esc((l.names || []).map((n, i) => l.sids && l.sids[i] ? `${n}·${l.sids[i]}` : n).join('、'))}→${esc(l.place)}</b><span>${timeStr(l.sentAt)} ${l.confirmed ? '✅' : (l.retracted ? '撤回' : '…')}</span></li>`).join('') : '<li>暂无</li>';
+    ? S.pageLog.slice().reverse().map(l => {
+      const st = l.retracted ? '⛔ 已撤回' : (l.confirmed ? '✅ 已到' : '… 待处理');
+      const cb = l.id && !l.retracted
+        ? `<label style="display:inline-flex;align-items:center;margin-right:4px;cursor:pointer" title="勾选后可批量已到/撤回"><input type="checkbox" data-pid="${esc(l.id)}" ${pageChecked.has(l.id) ? 'checked' : ''}></label>`
+        : '';
+      const note = l.note ? ` · 留言:${esc(l.note)}` : '';
+      return `<li style="${l.retracted ? 'opacity:.55' : (l.confirmed ? 'background:rgba(47,158,68,.10)' : '')}">${cb}<b>${esc(pageNamesTxt(l))}→${esc(l.place)}</b><span>${timeStr(l.sentAt)} ${st}${l.from ? ' · ' + esc(l.from) : ''}${note}</span></li>`;
+    }).join('') : '<li>暂无</li>';
+  pageBatchRefresh();
   // 名单（学号/组别旁直接改：权重 0=今天不点他，1=正常，2=双倍概率…；📌=加入今日请假）
   const absNow = S.absentToday || [];
   $('stuList').innerHTML = S.students.map(s => {
@@ -299,8 +344,40 @@ $('pageBtn').onclick = async () => {
     window.djt.notify(`📢 已传呼：${pageNames}`, `请到「${selPlace}」` + (frm ? ` 找 ${frm}` : ''));
   }
 };
-$('confirmBtn').onclick = () => cmd({ action: 'pageConfirm' });
-$('retractBtn').onclick = () => cmd({ action: 'pageRetract' });
+// 2026-09-07：「已到/撤回」全部改为按记录 id 精确作用——当前传呼卡片只作用于当前一条；
+// 下方记录列表可勾选多条后批量操作，均不再扩散到全部历史。
+// 记录带 id 时按 id 精确指定；个别旧服务端无 id 概念则退回「当前一条」默认语义，保持兼容
+$('confirmBtn').onclick = () => {
+  const p = S && S.page;
+  if (!p || p.retracted || p.confirmed) return toast('当前没有待确认的传呼');
+  cmd(p.id ? { action: 'pageConfirm', ids: [p.id] } : { action: 'pageConfirm' });
+};
+$('retractBtn').onclick = () => {
+  const p = S && S.page;
+  if (!p || p.retracted) return toast('当前没有可撤回的传呼');
+  cmd(p.id ? { action: 'pageRetract', ids: [p.id] } : { action: 'pageRetract' });
+};
+// 记录勾选（只处理 checkbox，避免误触）
+$('pageLogList').addEventListener('click', e => {
+  const cb = e.target.closest && e.target.closest('input[data-pid]');
+  if (!cb) return;
+  cb.checked ? pageChecked.add(cb.dataset.pid) : pageChecked.delete(cb.dataset.pid);
+  pageBatchRefresh();
+});
+$('pageBatchConfirmBtn').onclick = async () => {
+  const ids = [...pageChecked];
+  if (!ids.length) return toast('请先勾选要确认的传呼记录');
+  pageChecked.clear();
+  await cmd({ action: 'pageConfirm', ids });
+  pageBatchRefresh();
+};
+$('pageBatchRetractBtn').onclick = async () => {
+  const ids = [...pageChecked];
+  if (!ids.length) return toast('请先勾选要撤回的传呼记录');
+  pageChecked.clear();
+  await cmd({ action: 'pageRetract', ids });
+  pageBatchRefresh();
+};
 
 /* ---------- 名单事件 ---------- */
 $('importBtn').onclick = async () => {
