@@ -202,19 +202,25 @@ export class Room {
     this.ready = this.init();
   }
   async init() {
-    if (this.mode === 'class') return this.initClass();
-    let roster = await this.state.storage.get('roster');
-    if (!roster) roster = defaultRoster();
-    roster.classes.forEach(normalizeClass);
-    roster.classes.forEach((c, i) => { if (!c.rid) c.rid = this.genRid(c.name || '', i); });
-    // 旧明文密码一次性迁移为哈希（P1-7）
-    let migrated = false;
-    for (const c of roster.classes) if (c.pass && !c.passHash) {
-      c.passHash = await sha256hex(PASS_SALT + c.rid + '::' + c.pass);
-      delete c.pass; migrated = true;
+    try {
+      if (this.mode === 'class') { try { await this.initClass(); } catch (e) { this._initErr = 'initClass: ' + ((e && e.message) || e); } return; }
+      let roster = await this.state.storage.get('roster');
+      if (!roster) roster = defaultRoster();
+      roster.classes.forEach(normalizeClass);
+      roster.classes.forEach((c, i) => { if (!c.rid) c.rid = this.genRid(c.name || '', i); });
+      // 旧明文密码一次性迁移为哈希（P1-7）
+      let migrated = false;
+      for (const c of roster.classes) if (c.pass && !c.passHash) {
+        c.passHash = await sha256hex(PASS_SALT + c.rid + '::' + c.pass);
+        delete c.pass; migrated = true;
+      }
+      if (migrated) await this.state.storage.put('roster', roster);
+      this.roster = roster;
+    } catch (e) {
+      // 2026-09-07 诊断加固：init 异常不再让 this.ready 永久 reject（否则所有 API 500/1101）
+      this._initErr = String((e && e.message) || e);
+      this.roster = null;
     }
-    if (migrated) await this.state.storage.put('roster', roster);
-    this.roster = roster;
   }
   // 班级实例初始化：优先读自身存储；没有则从主实例引导迁移（老部署名单都在 main 里）
   async initClass() {
@@ -440,14 +446,24 @@ export class Room {
   }
   ensureHeartbeat() {
     if (this.hb) return;
+    // 2026-09-07 配额修复：定时器只在有 SSE 连接时存在；全部断开立即停表。
+    // 此前心跳 interval 一经创建永不清除 → DO 永远无法休眠/逐出 → 免费档
+    // 13,000 GB-s/天 时长配额被"全天保活"烧光 → 云端全站 500(Exceeded allowed
+    // duration in Durable Objects free tier, 00:00 UTC 自动重置)
     this.hb = setInterval(() => {
-      if (!this.sse.size) return;
+      if (!this.sse.size) { this.stopHeartbeat(); return; }
       // 2026-09-07：心跳从注释行 ': ping' 改为可感知 JSON 事件。注释行不触发浏览器
       // EventSource 的 onmessage，前端无法据此判断连接是否存活；改 hb 事件后，大屏/控制端
       // 的「N 秒无数据看门狗」能可靠识别"服务端不再推数据"的静默失效并强制重连
       this.raw(`data: ${JSON.stringify({ event: 'hb' })}\n\n`);
       this.autoExamTickAll();
     }, 25000);
+  }
+  stopHeartbeat() {
+    if (this.hb) { clearInterval(this.hb); this.hb = null; }
+  }
+  syncHeartbeat() {
+    if (!this.sse.size) this.stopHeartbeat();
   }
   sseResponse(roomId, sid = '') {
     this.ensureHeartbeat();
@@ -464,7 +480,7 @@ export class Room {
         this.sse.add(entry);
         ctrl.enqueue(enc.encode(`data: ${JSON.stringify({ event: 'state', state: this.snapshot(roomId, sid) })}\n\n`));
       },
-      cancel: () => { if (entry) this.sse.delete(entry); }
+      cancel: () => { if (entry) { this.sse.delete(entry); this.syncHeartbeat(); } }
     });
     return new Response(stream, {
       headers: {
@@ -1049,6 +1065,15 @@ export class Room {
     // 班级实例：入口请求前确保班级目录新鲜（新建/改名/删除班级 ≤20s 同步到下拉框，解决无法切班）
     try { await this.ensureDirFresh(); } catch (e) { /* 守卫失败不影响主流程 */ }
     // 主实例内部端点（仅 DO 间通过 service binding 调用；Worker 入口不转发 /internal/*，公网不可达）
+    if (this.mode === 'main' && url.pathname === '/internal/health') {
+      // 2026-09-07 只读诊断：云端全部 500/1101 时查看主 DO 存储是否损坏
+      const r = this.roster;
+      let clsType = null, clsNames = null, clsRids = null, placesOk = false;
+      if (r && Array.isArray(r.classes)) {
+        clsType = typeof r; clsNames = r.classes.map(c => c && c.name); clsRids = r.classes.map(c => c && c.rid); placesOk = Array.isArray(r.places);
+      }
+      return json({ selfId: this.selfId, initErr: this._initErr || null, invalid: this.invalid || false, rosterIsNull: r === null, clsType, clsCount: clsNames ? clsNames.length : 0, clsNames, clsRids, placesOk, currentClass: r ? r.currentClass : null });
+    }
     if (this.mode === 'main' && url.pathname === '/internal/dir') {
       return json({
         classes: this.roster.classes.map((c, i) => ({ i, name: c.name, rid: c.rid, locked: hasPass(c) })),
@@ -1106,6 +1131,11 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (url.pathname === '/') return Response.redirect(url.origin + '/screen.html', 302);
+    // 2026-09-07 只读诊断入口：/__diag → 主 DO /internal/health
+    if (url.pathname === '/__diag') {
+      try { return await env.ROOM.get(env.ROOM.idFromName('main')).fetch('https://do/internal/health'); }
+      catch (e) { return new Response(JSON.stringify({ diagFetchErr: String((e && e.message) || e) }), { status: 500, headers: { 'Content-Type': 'application/json' } }); }
+    }
     if (url.pathname === '/events' || url.pathname.startsWith('/api/')) {
       const roomId = url.searchParams.get('room') || '1';
       let name = 'main';
