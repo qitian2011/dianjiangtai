@@ -442,7 +442,10 @@ export class Room {
     if (this.hb) return;
     this.hb = setInterval(() => {
       if (!this.sse.size) return;
-      this.raw(': ping\n\n');
+      // 2026-09-07：心跳从注释行 ': ping' 改为可感知 JSON 事件。注释行不触发浏览器
+      // EventSource 的 onmessage，前端无法据此判断连接是否存活；改 hb 事件后，大屏/控制端
+      // 的「N 秒无数据看门狗」能可靠识别"服务端不再推数据"的静默失效并强制重连
+      this.raw(`data: ${JSON.stringify({ event: 'hb' })}\n\n`);
       this.autoExamTickAll();
     }, 25000);
   }
@@ -635,19 +638,44 @@ export class Room {
         const pairs = (body.names || []).map((n, i) => ({ n, s: (body.sids || [])[i] || '' })).filter(p => find(p.n));
         const names = pairs.map(p => p.n), sids = pairs.map(p => p.s);
         if (names.length === 0) { ok = false; msg = '学生不在名单内'; break; }
-        session.page = {
+        // 记录唯一 id：供「已到/撤回」按记录精确指定（2026-09-07：不再扩散到全部历史）
+        const entry = {
+          id: now.toString(36) + Math.random().toString(36).slice(2, 8),
           names, sids: sids.map(s => sanitize(s)), place: sanitize(String(body.place || '办公室')).slice(0, 20),
           from: sanitize(String(body.from || '')).slice(0, 20),
           note: sanitize(String(body.note || '')).slice(0, 30),
           // 展示时长已固定：大屏端居中弹窗统一展示 5 秒后自动收起（不再由控制端配置）
           sentAt: now, confirmed: false, retracted: false
         };
-        logPush(session.pageLog, { names, sids: session.page.sids, place: session.page.place, from: session.page.from, sentAt: now, confirmed: false, retracted: false }, 100);
-        this.broadcast(roomId, { event: 'page', page: session.page });
+        session.page = entry;                     // 当前页与日志同对象，确认/撤回同步生效
+        logPush(session.pageLog, entry, 100);
+        this.broadcast(roomId, { event: 'page', page: entry });
         break;
       }
-      case 'pageConfirm': if (session.page) { session.page.confirmed = true; session.pageLog.forEach(p => { if (!p.retracted && !p.confirmed) p.confirmed = true; }); } break;
-      case 'pageRetract': if (session.page) { session.page.retracted = true; session.pageLog.forEach(p => { if (!p.confirmed) p.retracted = true; }); session.page = null; } break;
+      case 'pageConfirm': {
+        // 默认只确认「当前(最新)一条」；传 ids 则仅对所选记录生效（不扩散历史；可批量）
+        const ids = Array.isArray(body.ids) ? body.ids.map(String) : null;
+        const tg = (ids && ids.length)
+          ? session.pageLog.filter(p => p.id && ids.includes(String(p.id)) && !p.retracted && !p.confirmed)
+          : (session.page && !session.page.confirmed && !session.page.retracted ? [session.page] : []);
+        if (!tg.length) { ok = false; msg = '没有可确认的传呼'; break; }
+        tg.forEach(p => { p.confirmed = true; });
+        msg = tg.length > 1 ? `已标记 ${tg.length} 条传呼已到` : '已到';
+        break;
+      }
+      case 'pageRetract': {
+        // 默认只撤回「当前(最新)一条」；传 ids 则仅对所选记录生效（含误点「已到」后的撤销）
+        const ids = Array.isArray(body.ids) ? body.ids.map(String) : null;
+        const tg = (ids && ids.length)
+          ? session.pageLog.filter(p => p.id && ids.includes(String(p.id)) && !p.retracted)
+          : (session.page && !session.page.retracted ? [session.page] : []);
+        if (!tg.length) { ok = false; msg = '没有可撤回的传呼'; break; }
+        // 撤回 = 该条彻底作废：同时清除 confirmed，避免「已到 + 已撤回」矛盾状态（误点已到可退回）
+        tg.forEach(p => { p.retracted = true; p.confirmed = false; });
+        if (session.page && session.page.retracted) session.page = null;
+        msg = tg.length > 1 ? `已撤回 ${tg.length} 条传呼` : '已撤回';
+        break;
+      }
       case 'examMode': session.examMode = !!body.on; session.examModeAuto = false; break;   // 手动切换：清除"自动开启"标记，自动逻辑不回收
       case 'setVolume': session.volume = Math.min(1, Math.max(0, +body.value || 0)); this.saveClassPrefs(roomId, session); break;
       case 'setAnim': session.animationMs = [2000, 3000, 5000].includes(body.ms) ? body.ms : 3000; this.saveClassPrefs(roomId, session); break;
