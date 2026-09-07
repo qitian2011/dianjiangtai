@@ -60,12 +60,14 @@ async function initSSE() {
     if (m.event === 'state') {
       S = m.state;
       // 无 room 参数打开：自动进入默认班级房间（地址栏同步变成 ?room=xxx）
+      // 2026-09-06：默认班不存在时兜底跳「当前展示班」的 rid —— 一律落到班级独立 DO，
+      // 避免停留在主实例 room'1' 副本上与班级 DO 会话隔离（点名/传呼互不可见）
       if (!new URLSearchParams(location.search).has('room')) {
-        const def = (S.allClasses || []).find(c => c.rid === DEFAULT_CTRL_ROOM);
-        if (def) { location.replace(location.pathname + '?room=' + encodeURIComponent(def.rid)); return; }
+        const list = S.allClasses || [];
+        const def = list.find(c => c.rid === DEFAULT_CTRL_ROOM) || list.find(x => x.i === (S.currentClass || 0));
+        if (def && def.rid) { location.replace(location.pathname + '?room=' + encodeURIComponent(def.rid)); return; }
       }
       render(); maybeShowPickModal();
-      // 无 room 尾缀 = 示例班（后端房间 '1' 固定展示首班），不需要再跳转 rid 链接
     }
   };
 }
