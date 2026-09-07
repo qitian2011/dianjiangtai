@@ -127,9 +127,16 @@ async function initSSE() {
     const el = $('connError'); if (el && el.style.display !== 'none') el.style.display = 'none';
     const msg = JSON.parse(e.data);
     if (msg.event === 'state') {
-      S = msg.state; render();
+      S = msg.state;
+      // 2026-09-06：无 room 参数 = 主实例上的「首班副本」。跳到该班自己的 rid DO，
+      // 与切班(换 ?room=rid)后的控制端/小程序同实例——点名/传呼/解锁/SSE 广播才互通；
+      // 否则大屏停留在主实例副本上，控制端发在班级 DO 的事件永远收不到。
+      if (!new URLSearchParams(location.search).has('room')) {
+        const cur = (S.allClasses || []).find(x => x.i === (S.currentClass || 0));
+        if (cur && cur.rid) { location.replace(location.pathname + '?room=' + encodeURIComponent(cur.rid)); return; }
+      }
+      render();
       if (window._pickerOpen) renderClassList();   // v2.0.2: S 更新时若班级选择器已展开则自动同步列表
-      // 无 room 尾缀 = 示例班（后端房间 '1' 固定展示首班），不需要再跳转 rid 链接
     }
     else if (msg.event === 'rollStart') startRoll(msg);
     else if (msg.event === 'rollResult') showResult(msg.names);
