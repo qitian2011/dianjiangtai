@@ -3,7 +3,7 @@
 // 交互语义与 ctrl.js 的 class-actions 一致：
 //   · 点班级即切换（带锁班先输「班级访问密码」，成功后记住本次会话免二次输）
 //   · 新建班级后留在原班（Ctrl 亦如此），新班出现在目录尾部可再点入
-//   · 删除班级 = 删除当前班（Ctrl delClassBtn 语义），删完回示例班房
+//   · 删除班级 = 删除当前班（Ctrl delClassBtn 语义），删完回目录首班（重载后自动落到新首班 rid）
 // 切班后组件发出事件 'switch'，宿主页面在 bindswitch 里执行「清空旧态 + 重新拉取」（等价 Ctrl 切班重载页面）。
 const { cmdOf, getRoom, setRoom } = require('../../utils/djt.js');
 
@@ -25,7 +25,10 @@ Component({
       const i = Number(e.currentTarget.dataset.i);
       const c = this.data.classes.find(x => x.i === i);
       if (!c || i === this.data.curIdx) return;
-      const room = i === 0 ? '1' : (c.rid || '');   // 示例班固定 '1' 房（与无参 H5 同构）
+      // 班级一律走 rid 独立 DO（含目录首班）：与网页端「切班=换 ?room=rid」同构。
+      // 2026-09-06 修复：旧代码把 i===0 硬编码成主实例 room '1'，首班是带锁真实班级时
+      // 小程序与大屏分处两个 DO 实例，点名/传呼/广播互不可见。
+      const room = c.rid || '1';
       if (!room) { wx.showToast({ title: '无法进入该班', icon: 'none' }); return; }
       if (c.locked) this.enterLocked(room, c.name);
       else this.goRoom(room);
@@ -154,7 +157,7 @@ Component({
               wx.hideLoading();
               if (!r2 || !r2.ok) throw new Error((r2 && r2.msg) || '删除失败');
               wx.removeStorageSync(unlockKey(c.rid));   // 删班后解锁记忆失效
-              setRoom('1');                             // 回示例班房（Ctrl 删班后回首页）
+              setRoom('1');                             // 回默认语境（下次加载自动落到新首班 rid）
               wx.showToast({ title: '已删除', icon: 'success' });
               this.triggerEvent('switch');
             }).catch(err => {
