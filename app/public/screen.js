@@ -112,6 +112,11 @@ function voiceModeAllowsAI() { return S && (S.voiceMode === 'ai' || S.voiceMode 
 
 /* ---------- SSE（?room=X 指定班级；无 room 默认打开示例班） ---------- */
 let es = null;
+let sseLastEvt = Date.now();   // 2026-09-07：最近一次收到服务器数据的时间（心跳 hb/state/事件），看门狗判活依据
+function reopenSSE() {         // 2026-09-07：统一重连入口（onerror 与看门狗共用），防并发重复建连
+  if (reopenSSE._t) return;
+  reopenSSE._t = setTimeout(() => { reopenSSE._t = null; initSSE(); }, 30);
+}
 const ROOM = new URLSearchParams(location.search).get('room') || '1';
 // 标签页会话 id：解锁态按标签页隔离（sessionStorage 关标签即清）——新开页面/新设备打开加密班级 URL 必弹密码框
 const SID = (() => { let s = sessionStorage.getItem('djSid'); if (!s) { s = 's' + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('djSid', s); } return s; })();
@@ -124,6 +129,7 @@ async function initSSE() {
   setTimeout(() => { if (!initSSE._gotState) { const el = $('connError'); if (el) el.style.display = ''; } }, 6000);
   es.onmessage = (e) => {
     initSSE._gotState = true;
+    sseLastEvt = Date.now();   // 2026-09-07：任何数据（含 25s 心跳 hb 事件）都证明连接存活
     const el = $('connError'); if (el && el.style.display !== 'none') el.style.display = 'none';
     const msg = JSON.parse(e.data);
     if (msg.event === 'state') {
@@ -150,18 +156,35 @@ async function initSSE() {
   };
   // v2.0.3: SSE 连续失败(长时间断网)累计 5 次 → 主动关闭重连，不再死等自动重连
   let esErr = 0;
-  es.onopen = () => { esErr = 0; const el = $('connError'); if (el && el.style.display !== 'none') el.style.display = 'none'; };
+  es.onopen = () => {
+    esErr = 0;
+    sseLastEvt = Date.now();
+    classLockAutoTried = false;   // 2026-09-07：每次(重)连都允许自动试一次历史密码——DO 空闲回收丢失解锁态后可自愈
+    const el = $('connError'); if (el && el.style.display !== 'none') el.style.display = 'none';
+  };
   es.onerror = () => {
     esErr += 1;
     if (esErr >= 5) {
       esErr = 0;
       try { es.close(); } catch (err) {}
       es = null;
-      setTimeout(() => { initSSE(); }, 3000);
+      reopenSSE();
     }
   };
 }
 initSSE();
+// 2026-09-07 看门狗：50s 无任何数据（服务端 25s 心跳漏 1 次以上）→ 判定连接静默失效并强制重连。
+// 覆盖"DO 被空闲回收后不再推数据、但 TCP 未触发 error"等长时间运行失效场景（大屏/控制端收不到消息）
+setInterval(() => {
+  if (!es || es.readyState === EventSource.CLOSED) return;   // 已关：交给 onerror 流程
+  if (Date.now() - sseLastEvt > 50000) {
+    console.warn('[djt] SSE 静默超时(50s 无数据)，强制重连');
+    sseLastEvt = Date.now();
+    try { es.close(); } catch (e) {}
+    es = null;
+    reopenSSE();
+  }
+}, 10000);
 
 /* ---------- 大屏班级切换（有密码的班级需输入密码） ---------- */
 /* ---------- 班级密码锁定画面 ---------- */
