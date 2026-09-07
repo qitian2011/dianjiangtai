@@ -145,7 +145,7 @@ async function initSSE() {
       if (window._pickerOpen) renderClassList();   // v2.0.2: S 更新时若班级选择器已展开则自动同步列表
     }
     else if (msg.event === 'rollStart') startRoll(msg);
-    else if (msg.event === 'rollResult') showResult(msg.names);
+    else if (msg.event === 'rollResult') showResult(msg);   // 2026-09-07：传整个事件对象——showResult 内部取 msg.display/msg.students（组名）；旧载荷只有 names 时同样兼容
     else if (msg.event === 'answerStart') showAnswerStart();
     else if (msg.event === 'marked') showMark(msg.result);
     else if (msg.event === 'skipped') { }
