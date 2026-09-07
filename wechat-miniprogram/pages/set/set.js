@@ -169,5 +169,5 @@ Page({
 
   goConnect() { wx.navigateTo({ url: '/pages/connect/connect' }); },
   volPct(v) { return Math.round((v || 0) * 100) + '%'; },
-  roomLabel() { const r = getRoom(); return r === '1' ? '示例班（云端主房）' : r; }
+  roomLabel() { const r = getRoom(); return r === '1' ? '未选定班级（默认）' : r; }
 });
