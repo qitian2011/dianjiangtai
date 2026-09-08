@@ -1,4 +1,0 @@
-{
-  "navigationBarTitleText": "点名答题",
-  "usingComponents": { "classbar": "/components/classbar/classbar", "lockoverlay": "/components/lockoverlay/lockoverlay" }
-}
