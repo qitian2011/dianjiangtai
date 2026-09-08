@@ -1,0 +1,32 @@
+{
+  "pages": [
+    "pages/roll/roll",
+    "pages/page/page",
+    "pages/roster/roster",
+    "pages/tt/tt",
+    "pages/set/set",
+    "pages/connect/connect"
+  ],
+  "window": {
+    "navigationBarTitleText": "点将台控制端",
+    "navigationBarBackgroundColor": "#17326B",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#F2F4FA"
+  },
+  "tabBar": {
+    "color": "#8A93A8",
+    "selectedColor": "#2E8BE0",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/roll/roll", "text": "点名", "iconPath": "/assets/tab/roll.png", "selectedIconPath": "/assets/tab/roll-active.png" },
+      { "pagePath": "pages/page/page", "text": "传呼", "iconPath": "/assets/tab/page.png", "selectedIconPath": "/assets/tab/page-active.png" },
+      { "pagePath": "pages/roster/roster", "text": "名单", "iconPath": "/assets/tab/roster.png", "selectedIconPath": "/assets/tab/roster-active.png" },
+      { "pagePath": "pages/tt/tt", "text": "课表", "iconPath": "/assets/tab/tt.png", "selectedIconPath": "/assets/tab/tt-active.png" },
+      { "pagePath": "pages/set/set", "text": "设置", "iconPath": "/assets/tab/set.png", "selectedIconPath": "/assets/tab/set-active.png" }
+    ]
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2",
+  "lazyCodeLoading": "requiredComponents"
+}

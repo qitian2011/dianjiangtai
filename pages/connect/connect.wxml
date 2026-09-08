@@ -1,0 +1,40 @@
+<view class="page-root {{themeClass}}">
+<!-- 连接状态卡：打开自动连接，失败时显示原因与重试（无密码输入门槛） -->
+<view class="card" wx:if="{{stage === 'boot'}}">
+  <view class="label">云端连接</view>
+  <view wx:if="{{busy}}" class="muted">正在连接班级…</view>
+  <block wx:else>
+    <view wx:if="{{msg}}" class="muted err" style="font-weight:600">⚠ 连接云端失败</view>
+    <view wx:if="{{msg}}" class="muted mt6" style="font-size:12px">{{msg}}</view>
+    <view class="row-gap mt10" wx:if="{{msg}}">
+      <view class="btn btn-sm" bindtap="onRetry">重试</view>
+    </view>
+    <view class="tip mt8" wx:if="{{!msg}}">连接中，请稍候…</view>
+  </block>
+</view>
+
+<view class="card" wx:if="{{stage === 'lock'}}">
+  <view class="label">🔒 {{unlockName}} 已加密</view>
+  <view class="muted" style="margin-bottom:10px">请输入该班自行设置的<text class="hl">班级访问密码</text>。<text class="hl">这不是云端访问密码</text>。</view>
+  <input class="field" password placeholder="班级访问密码" value="{{pass}}" bindinput="onPassInput" />
+  <view class="muted err" wx:if="{{msg}}" style="margin-top:8px">{{msg}}</view>
+  <view style="height:12px"></view>
+  <button class="btn" disabled="{{busy}}" bindtap="doUnlock">解锁并进入</button>
+</view>
+
+<view class="card" wx:if="{{stage === 'ready'}}">
+  <view class="label">已连接 · 当前班级</view>
+  <view style="font-size:22px;font-weight:600;color:var(--title)">{{curName}}</view>
+  <view class="tip mt6">去底部「点名 / 传呼 / 名单 / 课表 / 设置」页操作；点下方班级可随时切换。</view>
+</view>
+
+<view class="card" wx:if="{{classes.length}}">
+  <view class="label">班级列表（当前：{{curName}}）</view>
+  <view class="chip-row">
+    <view wx:for="{{classes}}" wx:key="i"
+      class="chip {{item.i === curIdx ? 'on' : ''}} {{item.locked ? 'lock' : ''}}"
+      data-i="{{item.i}}" bindtap="onClassTap">{{item.name}}{{item.locked ? '·锁' : ''}}</view>
+  </view>
+  <view class="tip mt8">点班级切换；带锁班级需输班级访问密码</view>
+</view>
+</view>

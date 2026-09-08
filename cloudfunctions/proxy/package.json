@@ -1,0 +1,7 @@
+{
+  "name": "proxy",
+  "version": "1.0.0",
+  "description": "点将台云端代理：转发到 Cloudflare Worker",
+  "main": "index.js",
+  "dependencies": {}
+}

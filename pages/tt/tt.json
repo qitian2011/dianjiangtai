@@ -1,0 +1,4 @@
+{
+  "navigationBarTitleText": "课表与公告",
+  "usingComponents": { "classbar": "/components/classbar/classbar", "lockoverlay": "/components/lockoverlay/lockoverlay" }
+}

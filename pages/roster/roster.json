@@ -1,0 +1,4 @@
+{
+  "navigationBarTitleText": "名单管理",
+  "usingComponents": { "classbar": "/components/classbar/classbar", "lockoverlay": "/components/lockoverlay/lockoverlay" }
+}

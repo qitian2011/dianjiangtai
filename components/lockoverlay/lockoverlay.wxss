@@ -1,0 +1,50 @@
+.lock-mask {
+  position: fixed;
+  left: 0; top: 0; right: 0; bottom: 0;
+  background: var(--mask);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+}
+.lock-card {
+  width: 82%;
+  max-width: 320px;
+  background: var(--card);
+  border-radius: 18px;
+  padding: 22px 18px 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  text-align: center;
+}
+.lock-title { font-size: 18px; font-weight: 700; color: var(--text); }
+.lock-tip { font-size: 12px; color: var(--sub); margin-top: 6px; line-height: 1.5; }
+.hl { color: var(--brand); font-weight: 600; }
+.lock-input {
+  margin-top: 14px;
+  border: 1px solid var(--line-2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 16px;
+  text-align: center;
+}
+.lock-btn {
+  margin-top: 12px;
+  background: var(--brand);
+  color: var(--on-brand);
+  border-radius: 10px;
+  font-size: 16px;
+  padding: 11px 0;
+  line-height: 1.4;
+}
+.lock-btn::after { border: none; }
+.lock-btn.lock-busy { opacity: 0.5; }   /* busy class，替代属性选择器（组件 wxss 禁用 [disabled]） */
+.lock-switch {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--brand);
+  padding: 6px;
+}
+.lock-hover { opacity: 0.6; }
+.lock-msg { color: var(--danger); font-size: 13px; margin-top: 8px; }
