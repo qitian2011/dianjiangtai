@@ -49,7 +49,7 @@
 
   header.hero{
     position:relative; z-index:1;
-    padding: 9vh 6vw 2vh;
+    padding: 8vh 6vw 1.5vh;
     text-align:center;
   }
   .hero .date{ font-size:14px; letter-spacing:.4em; color:var(--gold-soft); opacity:.85; margin-bottom:.6em; }
@@ -63,78 +63,68 @@
   }
   @keyframes breathe{ 0%,100%{ transform:translateY(0)} 50%{ transform:translateY(-4px)} }
   .hero .sub{ font-size:clamp(14px, 4vw, 18px); color:var(--ink-dim); letter-spacing:.15em; }
-  .hero .deco{
-    display:flex; justify-content:center; gap:.4em; margin-top:.9em; font-size:clamp(20px, 6vw, 28px);
-    filter: drop-shadow(0 4px 8px rgba(0,0,0,.4));
-  }
 
   main{
     position:relative; z-index:1;
-    max-width: 680px; margin: 0 auto; padding: 2vh 5vw 12vh;
+    max-width: 680px; margin: 0 auto; padding: 1.5vh 5vw 10vh;
   }
 
-  /* 祝福语大卡：一句一卡，居中大字 */
-  .blessing{
-    margin: 20px 0;
-    padding: 30px 26px 24px;
-    background: linear-gradient(150deg, rgba(255,208,132,.14), rgba(255,247,236,.06) 55%, rgba(255,179,193,.08));
+  /* 一张完整贺卡：4 句祝福 + 落款同框 */
+  .greet{
+    margin: 10px 0 0;
+    padding: clamp(28px, 7vw, 52px) clamp(20px, 6vw, 46px);
+    background:
+      radial-gradient(420px 180px at 50% 0%, rgba(255,224,138,.16), transparent 70%),
+      linear-gradient(155deg, rgba(255,208,132,.14), rgba(255,247,236,.06) 50%, rgba(255,179,193,.09));
     border:1px solid var(--card-border);
-    border-radius: 20px;
-    box-shadow: var(--shadow);
+    border-radius: 26px;
+    box-shadow: var(--shadow), inset 0 0 60px rgba(255,208,132,.05);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
-    transform: translateY(12px); opacity:0;
-    animation: rise .8s cubic-bezier(.2,.7,.3,1) forwards;
     text-align:center;
     position:relative;
+    transform: translateY(14px); opacity:0;
+    animation: rise .9s cubic-bezier(.2,.7,.3,1) forwards;
   }
-  .blessing::before{
-    content:attr(data-no);
-    position:absolute; top:-13px; left:50%; transform:translateX(-50%);
-    background: linear-gradient(135deg, #e8a24a, #ffd084);
-    color:#5a2200; font-weight:800; font-size:12px;
-    padding:3px 12px; border-radius:999px;
-    box-shadow:0 3px 8px rgba(0,0,0,.3);
-    letter-spacing:.1em;
-  }
-  .blessing .msg{
-    font-size: clamp(20px, 6vw, 27px);
+  /* 四角小花饰 */
+  .greet .corn{ position:absolute; font-size:16px; opacity:.75; filter:drop-shadow(0 2px 4px rgba(0,0,0,.3)); }
+  .greet .corn.tl{ top:10px; left:14px; }
+  .greet .corn.tr{ top:10px; right:14px; }
+  .greet .corn.bl{ bottom:10px; left:14px; }
+  .greet .corn.br{ bottom:10px; right:14px; }
+
+  .gline{
+    margin: .62em auto;
+    font-size: clamp(19px, 5.6vw, 25px);
     line-height:1.9;
     color: var(--ink);
-    letter-spacing:.06em;
-    margin:0;
-    word-break: break-word;
+    letter-spacing:.05em;
     font-weight:600;
     text-shadow: 0 2px 10px rgba(0,0,0,.25);
+    word-break: break-word;
+    opacity:0;
+    animation: rise .8s ease forwards;
   }
-  .blessing .msg + .by{ margin-top:16px; }
-  .blessing .by{
-    display:inline-flex; align-items:center; gap:.4em;
-    color: var(--gold-soft); opacity:.85;
-    font-size:13px; letter-spacing:.12em;
-  }
-  .blessing .by::before, .blessing .by::after{ content:"—"; opacity:.6; }
+  .gline::before{ content:"✦ "; color:var(--gold); font-size:.72em; vertical-align:.15em; }
+  .gline::after{ content:" ✦"; color:var(--gold); font-size:.72em; vertical-align:.15em; }
 
-  /* 末尾落款卡 */
+  /* 落款（同框底部分隔） */
   .sign{
-    margin: 34px auto 0; max-width: 420px;
-    padding: 26px 20px 22px;
-    text-align:center;
-    border-radius: 20px;
-    border: 1px solid rgba(255,224,138,.5);
-    background: linear-gradient(150deg, rgba(255,208,132,.22), rgba(255,179,193,.12));
-    box-shadow: var(--shadow);
-    transform: translateY(12px); opacity:0;
-    animation: rise .9s .3s cubic-bezier(.2,.7,.3,1) forwards;
+    margin-top: clamp(16px, 4vw, 28px);
+    padding-top: clamp(12px, 3vw, 20px);
+    border-top: 1px dashed rgba(255,224,138,.45);
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    opacity:0;
+    animation: rise .9s .35s ease forwards;
   }
-  .sign .flower{ font-size: clamp(22px, 7vw, 30px); margin-bottom:.3em; filter:drop-shadow(0 3px 6px rgba(0,0,0,.3)); }
+  .sign .flower{ font-size: clamp(18px, 5vw, 24px); filter:drop-shadow(0 3px 6px rgba(0,0,0,.3)); }
   .sign .who{
-    font-size: clamp(18px, 5.6vw, 24px);
+    font-size: clamp(18px, 5.4vw, 24px);
     font-weight:800; color:var(--gold);
-    letter-spacing:.15em;
+    letter-spacing:.18em;
     text-shadow: 0 3px 12px rgba(0,0,0,.35);
   }
-  .sign .wish{ margin-top:.5em; font-size:13px; color:var(--ink-dim); letter-spacing:.3em; opacity:.8; }
+  .sign .wish{ font-size:13px; color:var(--ink-dim); letter-spacing:.32em; opacity:.85; }
 
   .foot{
     margin-top: 30px; padding: 10px 0 24px;
@@ -154,11 +144,10 @@
   @keyframes rise { to { transform: translateY(0); opacity:1; } }
 
   @media (max-width: 380px){
-    .blessing{ padding: 24px 18px 20px; }
-    .blessing .msg{ line-height:1.8; }
+    .greet{ padding: 26px 16px; }
   }
   @media (prefers-reduced-motion: reduce){
-    .blessing,.sign{ animation:none; transform:none; opacity:1; }
+    .greet,.gline,.sign{ animation:none; transform:none; opacity:1; }
     .hero h1{ animation:none; }
     .stars span{ animation:none; }
   }
@@ -172,7 +161,6 @@
   <div class="date">2026 · 九月十日</div>
   <h1>老师，教师节快乐！</h1>
   <div class="sub">—— 致最敬爱的您 ——</div>
-  <div class="deco">🌸 ✨ 🎉 🌹 ✨ 🌷</div>
 </header>
 
 <main id="cards">
@@ -186,12 +174,13 @@
 
 <script>
 /* ============================================================================
- * 教师节祝福贺卡 —— 数据驱动
+ * 教师节祝福贺卡 —— 单框完整贺卡
  * 结构：
- *   TITLE   页头大标题
- *   BLESSINGS 祝福语句数组（每句一卡）
- *   SIGN    落款（班级/署名，显示在文末落款卡）
- * 兼容：也支持 URL ?data=<base64(JSON)> 整体覆盖 { title, bless, sign }
+ *   TITLE     页头大标题
+ *   BLESSINGS 祝福语句数组（同框内逐句排列）
+ *   SIGN      落款（班级/署名）
+ *   SIGN_WISH 落款副行
+ * 兼容：也支持 URL ?data=<base64(JSON)> 整体覆盖 { title, bless, sign, signWish }
  * ========================================================================== */
 const TITLE = '老师，教师节快乐！';
 const BLESSINGS = [
@@ -249,24 +238,28 @@ function render(opt){
       </div>`;
     return;
   }
+
+  // 单框贺卡
+  const frame = document.createElement('article');
+  frame.className = 'greet';
+  frame.innerHTML = `
+    <span class="corn tl">🌸</span><span class="corn tr">🌹</span>
+    <span class="corn bl">🌷</span><span class="corn br">⭐</span>`;
   list.forEach((msg, idx) => {
-    const div = document.createElement('article');
-    div.className = 'blessing';
-    div.setAttribute('data-no', '💌 祝福 ' + String(idx+1).padStart(2,'0'));
-    div.style.animationDelay = (idx*130) + 'ms';
     const p = document.createElement('p');
-    p.className = 'msg';
+    p.className = 'gline';
+    p.style.animationDelay = (idx*140) + 'ms';
     p.textContent = msg;
-    div.appendChild(p);
-    root.appendChild(div);
+    frame.appendChild(p);
   });
-  // 落款卡
   const sg = document.createElement('div');
   sg.className = 'sign';
-  sg.innerHTML = `<div class="flower">🌸🌹🌸</div>
+  sg.innerHTML = `
+    <div class="flower">🌸🌹🌸</div>
     <div class="who">${esc(sign)}</div>
     <div class="wish">${esc(wish)}</div>`;
-  root.appendChild(sg);
+  frame.appendChild(sg);
+  root.appendChild(frame);
 }
 
 /* —— 启动 —— */
