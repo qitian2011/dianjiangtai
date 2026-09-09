@@ -127,7 +127,7 @@
 html, body { height: 100%; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue",
-               "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+               "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
   background: var(--bg-grad); background-attachment: fixed; color: var(--text);
   -webkit-font-smoothing: antialiased;
   transition: background .3s ease, color .3s ease;
@@ -635,3 +635,50 @@ label.switch input:checked::after { transform: translateX(19px); }
 }
 .screen .tb-dl:hover { background: var(--accent); border-color: transparent; color: #fff; box-shadow: 0 4px 16px rgba(10,132,255,.4); }
 .screen .tb-dl:active { transform: scale(.92); }
+
+/* ==================== 教师节快照版（2026-09，纯前端节日皮肤，默认开启；?fest=0 关闭） ==================== */
+body.screen.fest,
+[data-theme="light"] body.screen.fest {
+  --text: #fff6ee;
+  --dim: rgba(255,236,224,.8);
+  --separator: rgba(255,214,200,.18);
+  --glass: rgba(74,26,40,.46);
+  --card2: rgba(96,34,48,.5);
+  --accent: #ffb340;
+  background:
+    radial-gradient(90vmax 60vmax at 12% 6%, rgba(255,150,60,.3), transparent 55%),
+    radial-gradient(80vmax 60vmax at 88% 92%, rgba(255,70,110,.26), transparent 55%),
+    radial-gradient(60vmax 50vmax at 78% 8%, rgba(255,200,90,.2), transparent 50%),
+    radial-gradient(1200px 800px at 50% -20%, #55162a 0%, #2c0b17 55%, #18060d 100%);
+}
+/* 待机内容下移给节日横幅让位 */
+.screen.fest .center { padding-top: 23vh; }
+.screen.fest #standbyTt, .screen.fest .notice-panel { border-color: rgba(255,205,160,.35); }
+/* 节日横幅 */
+.fest-banner { position: fixed; top: 9vmin; left: 0; right: 0; text-align: center; z-index: 4; pointer-events: none; }
+.fest-banner b {
+  display: inline-block; font-size: 6vmin; font-weight: 800; letter-spacing: 1vmin; color: #fff;
+  text-shadow: 0 0 2.4vmin rgba(255,190,90,.95), 0 .6vmin 2vmin rgba(140,30,50,.65);
+  background: linear-gradient(135deg, rgba(255,190,90,.2), rgba(255,90,110,.16));
+  border: 1px solid rgba(255,214,170,.32); border-radius: 999px;
+  padding: 1.5vmin 5vmin; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  animation: festPop 1.1s cubic-bezier(.2,1.4,.4,1) both;
+}
+.fb-emoji { display: inline-block; font-size: 4.6vmin; margin: 0 2vmin; animation: fbSwing 2.6s ease-in-out infinite; }
+.fb-emoji:last-child { animation-delay: .55s; }
+@keyframes festPop { from { opacity: 0; transform: scale(.55) translateY(-3vmin); } to { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes fbSwing { 0%,100% { transform: rotate(-9deg); } 50% { transform: rotate(10deg); } }
+/* 祝福雨 */
+#festRain { position: fixed; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
+.fd {
+  position: absolute; top: -8vmin; white-space: nowrap; font-weight: 700; opacity: 0;
+  will-change: transform, opacity; text-shadow: 0 0 1.8vmin rgba(255,255,255,.35), 0 .4vmin 1.2vmin rgba(0,0,0,.3);
+  animation: festFall linear infinite;
+}
+@keyframes festFall {
+  0% { transform: translateY(-6vh) rotate(-6deg); opacity: 0; }
+  8% { opacity: .92; }
+  88% { opacity: .8; }
+  100% { transform: translateY(113vh) rotate(8deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .fb-emoji { animation: none; } #festRain { display: none !important; } .fest-banner b { animation: none; } }
