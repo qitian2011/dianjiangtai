@@ -490,15 +490,18 @@ function render() {
   const d = new Date();
   $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   // 二维码（缩小放右下角，扫第一个候选地址进控制端，自动带房间参数）
-  // P2-8：仅当目标 URL 变化时才重建 SVG，避免高频 state 下反复清空/重插造成抖动
+  // 2026-09-09：教师节快照版叠加——festEnabled() && 当前是待机视图 → 扫码入口改为 /card.html 祝福贺卡
+  // （只在 standby 触发；非 standby 即恢复 ctrl 入口，避免点名/答题/传呼时误入祝福页）
   if (typeof qrcode === 'function') {
-    const urls = (S.ctrlUrls && S.ctrlUrls.length ? S.ctrlUrls : [location.origin + '/ctrl.html' + (location.search || '')]);
-    if (!render._qrUrl || render._qrUrl !== urls[0]) {
-      render._qrUrl = urls[0];
+    const inFest = festEnabled() && festStandbyVisible();
+    const fallback = (S.ctrlUrls && S.ctrlUrls.length ? S.ctrlUrls[0] : location.origin + '/ctrl.html' + (location.search || ''));
+    const url = inFest ? (location.origin + '/card.html') : fallback;
+    if (!render._qrUrl || render._qrUrl !== url) {
+      render._qrUrl = url;
       try {
         const qr = qrcode(0, 'M');
-        qr.addData(urls[0]); qr.make();
-        $('qrCorner').innerHTML = qr.createSvgTag({ cellSize: 2, margin: 1, scalable: true }) + '<div class="qr-corner-label">📱 扫码控制</div>';
+        qr.addData(url); qr.make();
+        $('qrCorner').innerHTML = qr.createSvgTag({ cellSize: 2, margin: 1, scalable: true }) + `<div class="qr-corner-label">${inFest ? '🎁 扫码收祝福' : '📱 扫码控制'}</div>`;
       } catch (e) {}
     }
   }
