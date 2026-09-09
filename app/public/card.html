@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#3a0d0d">
+<title>老师，教师节快乐！</title>
+<style>
+  *,*::before,*::after { box-sizing: border-box; }
+  :root {
+    --bg-1:#3a0d0d;
+    --bg-2:#7a1a1a;
+    --bg-3:#b2522a;
+    --ink:#fff7ec;
+    --ink-dim:#f3dcc1;
+    --gold:#ffd084;
+    --gold-soft:#ffe9b8;
+    --rose:#ffb3c1;
+    --card:rgba(255,247,236,.08);
+    --card-border:rgba(255,208,132,.35);
+    --shadow:0 10px 28px rgba(0,0,0,.35);
+  }
+  html,body { margin:0; padding:0; }
+  body {
+    min-height:100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(1200px 700px at 15% -10%, #ff8a5b33, transparent 60%),
+      radial-gradient(900px 600px at 110% 20%, #ffd08422, transparent 60%),
+      linear-gradient(160deg, var(--bg-1) 0%, var(--bg-2) 45%, var(--bg-3) 100%);
+    background-attachment: fixed;
+    overflow-x:hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* 顶部暖色光晕 + 飘字 */
+  body::before{
+    content:"";
+    position:fixed; inset:-10vh 0 auto 0; height:50vh;
+    background: radial-gradient(ellipse at 50% 0%, #ffd08455, transparent 70%);
+    pointer-events:none; z-index:0;
+  }
+  /* 装饰星点 */
+  .stars{ position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.55; }
+  .stars span{
+    position:absolute; width:3px; height:3px; border-radius:50%;
+    background:#ffe9b8; box-shadow:0 0 6px #ffe9b8;
+    animation: twinkle 3s infinite ease-in-out;
+  }
+  @keyframes twinkle{ 0%,100%{ opacity:.2; transform:scale(.8);} 50%{ opacity:1; transform:scale(1.3);} }
+
+  /* 头图 */
+  header.hero{
+    position:relative; z-index:1;
+    padding: 9vh 6vw 2vh;
+    text-align:center;
+  }
+  .hero .date{ font-size:14px; letter-spacing:.4em; color:var(--gold-soft); opacity:.85; margin-bottom:.6em; }
+  .hero h1{
+    margin:0 auto .4em; max-width:14em;
+    font-size: clamp(34px, 9vw, 56px);
+    line-height:1.18; font-weight:900;
+    color:var(--gold);
+    text-shadow: 0 4px 18px rgba(0,0,0,.45);
+    animation: breathe 4s ease-in-out infinite;
+  }
+  @keyframes breathe{ 0%,100%{ transform:translateY(0)} 50%{ transform:translateY(-4px)} }
+  .hero .sub{ font-size:clamp(14px, 4vw, 18px); color:var(--ink-dim); letter-spacing:.15em; }
+  .hero .deco{
+    display:flex; justify-content:center; gap:.4em; margin-top:.9em; font-size:clamp(20px, 6vw, 28px);
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,.4));
+  }
+
+  /* 主体卡片流 */
+  main{
+    position:relative; z-index:1;
+    max-width: 720px; margin: 0 auto; padding: 2vh 5vw 12vh;
+  }
+  .blessing{
+    margin: 14px 0;
+    padding: 18px 20px 16px;
+    background: var(--card);
+    border:1px solid var(--card-border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    transform: translateY(8px); opacity:0;
+    animation: rise .7s cubic-bezier(.2,.7,.3,1) forwards;
+  }
+  .blessing:nth-child(odd){ border-color: rgba(255,179,193,.4); }
+  .blessing .msg{
+    font-size: clamp(16px, 4.6vw, 19px);
+    line-height:1.75;
+    color: var(--ink);
+    letter-spacing:.02em;
+    margin:0 0 8px;
+    word-break: break-word;
+  }
+  .blessing .by{
+    display:flex; justify-content:flex-end; align-items:baseline; gap:.5em;
+    color: var(--gold);
+    font-size: 13px; letter-spacing:.1em;
+  }
+  .blessing .by .name{ font-weight:700; }
+  .blessing .by .cls{ color: var(--gold-soft); opacity:.75; font-size:12px; }
+
+  /* 第 1 张大字加粗 */
+  .blessing.first{ background: linear-gradient(135deg, rgba(255,208,132,.18), rgba(255,179,193,.12)); }
+  .blessing.first .msg{ font-size: clamp(18px, 5.2vw, 22px); font-weight:600; }
+
+  /* 计数条 */
+  .progress{
+    position:sticky; top:0; z-index:2;
+    margin: 0 -5vw 8px; padding: 8px 6vw;
+    background: linear-gradient(to bottom, rgba(58,13,13,.85), rgba(58,13,13,0));
+    color: var(--gold-soft); font-size:13px; letter-spacing:.15em;
+    text-align:center; backdrop-filter: blur(4px);
+  }
+  .progress b{ color:var(--gold); }
+
+  /* 尾巴 */
+  .foot{
+    margin-top: 30px; padding: 24px 0;
+    text-align:center; color: var(--ink-dim); opacity:.7;
+    font-size:13px; letter-spacing:.2em;
+  }
+  .foot .heart{ color: var(--rose); font-size:18px; }
+
+  /* 空数据占位（防止没填文案时空白） */
+  .empty{
+    text-align:center; padding: 60px 24px; color: var(--ink-dim);
+    border: 1px dashed rgba(255,224,138,.4); border-radius: 16px;
+    background: rgba(0,0,0,.18);
+  }
+  .empty h2{ color: var(--gold); margin:0 0 .4em; font-weight:700; }
+  .empty p{ margin:.3em 0; line-height:1.7; font-size:14px; }
+
+  @keyframes rise { to { transform: translateY(0); opacity:1; } }
+
+  /* 小屏优化 */
+  @media (max-width: 380px){
+    .blessing{ padding: 14px 16px; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    .blessing{ animation:none; transform:none; opacity:1; }
+    .hero h1{ animation:none; }
+    .stars span{ animation:none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="stars" aria-hidden="true">
+  <!-- 25 颗装饰星 -->
+</div>
+
+<header class="hero">
+  <div class="date">2026 · 九月十日</div>
+  <h1>老师，教师节快乐！</h1>
+  <div class="sub">—— 致最敬爱的您 ——</div>
+  <div class="deco">🌸 ✨ 🎉 🌹 ✨ 🌷</div>
+</header>
+
+<div class="progress" id="progress" hidden><span id="progCount">0</span> 位同学送来祝福</div>
+
+<main id="cards">
+  <!-- 由 JS 注入 -->
+</main>
+
+<div class="foot">
+  <div>每一句祝福，都来自 <span class="heart">❤</span> 心底</div>
+  <div style="margin-top:.4em; opacity:.7;">点将台 · 教师节贺卡</div>
+</div>
+
+<script>
+/* ============================================================================
+ * 教师节祝福贺卡 —— 数据驱动
+ * 1) 内置默认数组 BLESSINGS（每项 { msg, name }）
+ * 2) 也可由 URL 参数 ?data=<base64(JSON)> 注入，覆盖默认值（适合远程场景）
+ * 3) 占位提示：当数据为空或长度不足，会显示「待填写」提示，部署前补全即可
+ * ========================================================================== */
+const DEFAULT_BLESSINGS = [
+  // { msg: '老师，您辛苦了！愿您桃李满天下，笑口常开。', name: '张三' },
+  // —— 请把 41 条祝福 + 署名填入下方（生成自 jsj.txt 18 句 × 初三（2）班名单 41 人随机配对）——
+];
+
+/* 标题/署名展示班级（可改） */
+const CLASS_LABEL = '初三（2）班全体同学';
+
+/* —— 工具 —— */
+function decodeData(){
+  try{
+    const p = new URLSearchParams(location.search).get('data');
+    if(!p) return null;
+    const json = decodeURIComponent(escape(atob(p)));
+    const arr = JSON.parse(json);
+    if(Array.isArray(arr) && arr.length) return arr;
+  }catch(e){ console.warn('[card] data 参数解析失败', e); }
+  return null;
+}
+
+/* —— 星点 —— */
+(function buildStars(){
+  const box = document.querySelector('.stars');
+  if(!box) return;
+  for(let i=0;i<25;i++){
+    const s=document.createElement('span');
+    s.style.left = (Math.random()*100)+'%';
+    s.style.top  = (Math.random()*100)+'%';
+    s.style.animationDelay = (Math.random()*3)+'s';
+    s.style.opacity = (.3+Math.random()*.7).toFixed(2);
+    box.appendChild(s);
+  }
+})();
+
+/* —— 渲染 —— */
+function render(items){
+  const root = document.getElementById('cards');
+  const prog = document.getElementById('progress');
+  root.innerHTML = '';
+  if(!items || !items.length){
+    root.innerHTML = `
+      <div class="empty">
+        <h2>🌸 祝福正在路上</h2>
+        <p>这张贺卡的祝福文本还未填入。</p>
+        <p>请编辑 <code>card.html</code> 里的 <b>DEFAULT_BLESSINGS</b> 数组，<br>
+           把 41 条 <code>{ msg, name }</code> 填进去后重新部署即可。</p>
+      </div>`;
+    prog.hidden = true;
+    return;
+  }
+  items.forEach((it, idx) => {
+    const div = document.createElement('article');
+    div.className = 'blessing' + (idx===0 ? ' first' : '');
+    div.style.animationDelay = (Math.min(idx*60, 1500)) + 'ms';
+    const msg = String(it.msg || '').replace(/[<>&]/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]));
+    const name = String(it.name || '').replace(/[<>&]/g, ch => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[ch]));
+    div.innerHTML = `
+      <p class="msg">${msg}</p>
+      <div class="by"><span class="cls">${CLASS_LABEL}</span><span>·</span><span class="name">${name}</span></div>
+    `;
+    root.appendChild(div);
+  });
+  prog.hidden = false;
+  document.getElementById('progCount').textContent = items.length;
+}
+
+/* —— 启动 —— */
+const items = decodeData() || DEFAULT_BLESSINGS;
+render(items);
+</script>
+
+</body>
+</html>
