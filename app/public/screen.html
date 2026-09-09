@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>课堂互动大屏 · 展示端</title>
-<link rel="stylesheet" href="style.css?v=44">
-<script src="theme.js?v=44"></script>
+<link rel="stylesheet" href="style.css?v=45">
+<script src="theme.js?v=45"></script>
 </head>
 <body class="screen">
   <!-- 传呼横条（缩小常驻） -->
@@ -101,6 +101,10 @@
     </div>
   </div>
 
+  <!-- 教师节快照版（2026-09 纯前端节日皮肤；日期自动触发，可 ?fest=1/0 覆盖） -->
+  <div class="fest-banner" id="festBanner" style="display:none"><span class="fb-emoji">🎉</span><b>老师，教师节快乐！</b><span class="fb-emoji">🎉</span></div>
+  <div id="festRain" style="display:none"></div>
+
   <!-- 传呼全屏通知 -->
   <div class="page-overlay" id="pageOverlay" style="display:none">
     <div class="page-card">
@@ -126,7 +130,7 @@
 
   <div class="s-toast" id="screenToast"></div>
 
-<script src="vendor/qrcode.min.js?v=44"></script>
-<script src="screen.js?v=44"></script>
+<script src="vendor/qrcode.min.js?v=45"></script>
+<script src="screen.js?v=45"></script>
 </body>
 </html>
