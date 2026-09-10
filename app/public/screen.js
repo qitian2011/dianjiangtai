@@ -342,7 +342,6 @@ function renderTtTable() {
 /* ---------- 视图切换 ---------- */
 function view(name) {
   for (const v of ['standby', 'rolling', 'result', 'answering']) $(v).style.display = v === name ? '' : 'none';
-  festSkinTick();   // 教师节快照版：随视图切换只让待机页保持节日皮肤
 }
 function startRoll(msg) {
   const pool = (msg.pool && msg.pool.length ? msg.pool : (S ? S.students.map(s => s.name) : ['张三', '李四', '王五']));
@@ -490,18 +489,15 @@ function render() {
   const d = new Date();
   $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
   // 二维码（缩小放右下角，扫第一个候选地址进控制端，自动带房间参数）
-  // 2026-09-09：教师节快照版叠加——festEnabled() && 当前是待机视图 → 扫码入口改为 /card.html 祝福贺卡
-  // （只在 standby 触发；非 standby 即恢复 ctrl 入口，避免点名/答题/传呼时误入祝福页）
+  // P2-8：仅当目标 URL 变化时才重建 SVG，避免高频 state 下反复清空/重插造成抖动
   if (typeof qrcode === 'function') {
-    const inFest = festEnabled() && festStandbyVisible();
-    const fallback = (S.ctrlUrls && S.ctrlUrls.length ? S.ctrlUrls[0] : location.origin + '/ctrl.html' + (location.search || ''));
-    const url = inFest ? (location.origin + '/card.html') : fallback;
-    if (!render._qrUrl || render._qrUrl !== url) {
-      render._qrUrl = url;
+    const urls = (S.ctrlUrls && S.ctrlUrls.length ? S.ctrlUrls : [location.origin + '/ctrl.html' + (location.search || '')]);
+    if (!render._qrUrl || render._qrUrl !== urls[0]) {
+      render._qrUrl = urls[0];
       try {
         const qr = qrcode(0, 'M');
-        qr.addData(url); qr.make();
-        $('qrCorner').innerHTML = qr.createSvgTag({ cellSize: 2, margin: 1, scalable: true }) + `<div class="qr-corner-label">${inFest ? '🎁 扫码收祝福' : '📱 扫码控制'}</div>`;
+        qr.addData(urls[0]); qr.make();
+        $('qrCorner').innerHTML = qr.createSvgTag({ cellSize: 2, margin: 1, scalable: true }) + '<div class="qr-corner-label">📱 扫码控制</div>';
       } catch (e) {}
     }
   }
@@ -556,49 +552,5 @@ function render() {
   $('lessonLog').innerHTML = (S.lessonLog || []).map(l =>
     `<div>${esc((l.display || l.names).join('、'))}${l.result && RES[l.result] ? ` <b style="color:${RES[l.result][1]}">${RES[l.result][0]}</b>` : ''}</div>`
   ).join('');
-  festSkinTick();
 }
 setInterval(() => { const d = new Date(); $('clock').textContent = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }, 10000);
-
-/* ---------- 教师节快照版（2026-09，纯前端节日皮肤；默认开启，URL ?fest=0 关闭 / ?fest=1 强制开） ---------- */
-const FEST_WORDS = ['老师，节日快乐', '您辛苦了 ❤', '桃李满天下', '春风化雨', '谢谢您，老师', '师恩似海深', '教诲如春风', '粉笔写春秋', '点亮我们的人', '愿您笑口常开', '老师，我们爱您', '三尺讲台 · 四季耕耘', '每一句叮嘱都记得', '您是灯塔 ✨'];
-const FEST_ICONS = ['🎉', '🌸', '🍀', '⭐', '❤', '🧡', '💛', '✨'];
-const FEST_COLORS = ['#ffd9a0', '#ffb3c1', '#fff3d6', '#ffe08a', '#ffc2d1', '#ffe9b8', '#ff9e9e', '#fff0c2'];
-function festEnabled() {
-  const p = new URLSearchParams(location.search).get('fest');
-  if (p === '0') return false;
-  if (p === '1') return true;
-  return true;   // 快照版默认开启：现在打开就能看到；节后下架 = 此行改 false 重新部署（?fest=1 仍可手动预览）
-}
-function festStandbyVisible() {
-  const sb = $('standby');
-  return !!(sb && sb.style.display !== 'none');
-}
-let festRainBuilt = false;
-function festBuildRain() {
-  const box = $('festRain');
-  if (!box || festRainBuilt) return;
-  festRainBuilt = true;
-  for (let i = 0; i < 16; i++) {
-    const s = document.createElement('span');
-    s.className = 'fd';
-    s.textContent = FEST_WORDS[i % FEST_WORDS.length] + ' ' + FEST_ICONS[i % FEST_ICONS.length];
-    s.style.left = (3 + Math.random() * 90) + '%';
-    s.style.fontSize = (2.2 + Math.random() * 2.6) + 'vmin';
-    s.style.color = FEST_COLORS[i % FEST_COLORS.length];
-    s.style.animationDuration = (9 + Math.random() * 12) + 's';
-    s.style.animationDelay = (-Math.random() * 18) + 's';
-    box.appendChild(s);
-  }
-}
-function festSkinTick() {
-  const on = festEnabled();
-  document.body.classList.toggle('fest', on);
-  const b = $('festBanner'), r = $('festRain');
-  if (!b || !r) return;
-  const show = on && festStandbyVisible();
-  b.style.display = show ? '' : 'none';
-  r.style.display = show ? '' : 'none';
-  if (show) festBuildRain();
-}
-festSkinTick();
